@@ -278,6 +278,81 @@ class BienesService
     }
 
     /**
+     * Restaurar un bien desde la papelera (activo = true).
+     * Registra bitácora con motivo "Restauración".
+     */
+    public function restaurar(Usuario $actor, int $cveBien): Bien
+    {
+        $bien = $this->obtener($actor, $cveBien);
+
+        if ($bien->activo !== false) {
+            abort(422, 'El bien no está en la papelera.');
+        }
+
+        return DB::transaction(function () use ($bien, $actor) {
+            $bien->activo = true;
+            $bien->save();
+
+            $motivo = MotivoMovimiento::query()
+                ->where('nombre_motivo', 'Restauración')
+                ->value('cve_motivo');
+
+            if ($motivo !== null) {
+                BitacoraMovimiento::query()->create([
+                    'cve_bien' => $bien->getKey(),
+                    'cve_motivo' => $motivo,
+                    'cve_persona_accion' => $actor->cve_persona,
+                    'fecha_movimiento' => now(),
+                    'observaciones' => 'Bien restaurado desde la papelera por '.($actor->nombre ?? $actor->usuario),
+                ]);
+            }
+
+            return $bien->fresh(['articulo.familia.tipoBien', 'modelo.marca', 'aula', 'encargado']);
+        });
+    }
+
+    /**
+     * Eliminar definitivamente un bien que está en la papelera.
+     * - Solo bienes de la papelera (activo = false) y disponibles.
+     * - Borra sus dependencias (auditoría detalle, préstamos, bitácora del bien).
+     * - Deja un registro de rastro en bitácora con cve_bien null (porque el bien
+     *   ya no existirá) motivo "Baja Definitiva".
+     */
+    public function purgar(Usuario $actor, int $cveBien): void
+    {
+        $bien = $this->obtener($actor, $cveBien);
+
+        if ($bien->activo !== false) {
+            abort(422, 'Solo se pueden eliminar definitivamente los bienes de la papelera.');
+        }
+
+        if ($bien->estado_prestamo !== 'disponible') {
+            abort(422, 'El bien tiene un préstamo activo y no puede eliminarse definitivamente.');
+        }
+
+        DB::transaction(function () use ($bien, $actor) {
+            $motivo = MotivoMovimiento::query()
+                ->where('nombre_motivo', 'Baja Definitiva')
+                ->value('cve_motivo');
+
+            BitacoraMovimiento::query()->create([
+                'cve_bien' => null,
+                'cve_motivo' => $motivo,
+                'cve_persona_accion' => $actor->cve_persona,
+                'fecha_movimiento' => now(),
+                'observaciones' => 'Bien eliminado definitivamente: '.$bien->nombre
+                    .' (código '.$bien->codigo_barras.', identificador '.$bien->no_serie.')'
+                    .' por '.($actor->nombre ?? $actor->usuario),
+            ]);
+
+            $bien->auditoriasDetalle()->delete();
+            $bien->prestamos()->delete();
+            $bien->movimientos()->delete();
+            $bien->delete();
+        });
+    }
+
+    /**
      * ¿El identificador ya pertenece a otro bien? El identificador se
      * almacena en la columna no_serie (UNIQUE), por lo que la unicidad
      * es global, no por artículo.

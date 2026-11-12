@@ -125,7 +125,7 @@ php artisan migrate:fresh --seed   # reconstruir todo
 | Identificador | Exactamente 7 dígitos numéricos, guardado como **string** (conserva ceros iniciales). **Llena la columna `no_serie`**, que es UNIQUE → unicidad global. La API lo expone como `identificador`, nunca como `no_serie`. |
 | Código QR | Automático al crear: en BD se guarda `bienes/{cve_bien}`; la URL completa se arma en runtime con `FRONTEND_URL` del `.env` (ej. `http://localhost:5173/bienes/5`). Cambiar de dominio no requiere regenerar nada. |
 | Al cambiar el artículo | El prefijo del código de barras se re-genera conservando el identificador. |
-| Papelera | `DELETE` = `activo=false` (nunca borrado físico). Bloqueado si el bien está `prestado`. Registra bitácora con motivo "Baja Definitiva". |
+| Papelera | `DELETE` = `activo=false` (nunca borrado físico). Bloqueado si el bien está `prestado`. Registra bitácora con motivo "Baja Definitiva". Desde la papelera: `PUT .../restaurar` reactiva (motivo "Restauración") y `DELETE .../purgar` borra físicamente (borra dependencias y deja rastro en bitácora con `cve_bien = null`). |
 | Estados físicos | `bueno` (default), `regular`, `deteriorado` |
 | Estados de préstamo | `disponible` ↔ `prestado` (sincronizado por observer) |
 
@@ -157,6 +157,8 @@ php artisan migrate:fresh --seed   # reconstruir todo
 | POST | `/api/bienes` | Crear |
 | PUT/PATCH | `/api/bienes/{id}` | Editar |
 | DELETE | `/api/bienes/{id}` | Papelera |
+| PUT | `/api/bienes/{id}/restaurar` | Restaurar de la papelera (bitácora "Restauración") |
+| DELETE | `/api/bienes/{id}/purgar` | Borrado definitivo (con rastro en bitácora) |
 
 ### 5.4 Vistas del listado de bienes
 
@@ -193,7 +195,7 @@ Configuración: `FRONTEND_URL` en `.env` y `config/services.php`.
 
 ## 6. Testing
 
-`php artisan test` → **35 tests, 189 aserciones**.
+`php artisan test` → **44 tests, 222 aserciones**.
 
 - `tests/Feature/AuthTest.php` (6): login correcto (token+rol), contraseña
   incorrecta, usuario inexistente, usuario inactivo, consumo de endpoint con
@@ -202,11 +204,12 @@ Configuración: `FRONTEND_URL` en `.env` y `config/services.php`.
   automático, identificador (7 dígitos, ceros, unicidad global), bloqueos de
   alumno, visibilidad por propiedad, edición con re-generación de prefijo,
   papelera con bitácora, bienes prestados, acceso ajeno (403), sin token (401).
-- `tests/Feature/BienesVistasTest.php` (10): listado resumido (campos exactos),
+- `tests/Feature/BienesVistasTest.php` (19): listado resumido (campos exactos),
   vista papelera (admin/profesor, solo bienes inactivos y solo propios),
   filtro por aula, filtro por edificio (admin), endpoint `/api/aulas`
   (aulas del profesor con conteos, filtro por edificio), bloqueo de alumno,
-  detalle con foto y código de barras.
+  detalle con foto y código de barras, restaurar y purgar (permisos,
+  validaciones, borrado físico con dependencias y rastro en bitácora).
 
 Convención: `RefreshDatabase` + seed completo en cada test; asserts de negocio
 sobre modelos (`refresh()`), no solo sobre el JSON de respuesta.

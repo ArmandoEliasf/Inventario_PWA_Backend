@@ -97,4 +97,25 @@ class BienController extends Controller
             'data' => new BienResource($bien),
         ]);
     }
+
+    public function restaurar(Request $request, int $bien): JsonResponse
+    {
+        $actor = $this->actor($request);
+        $bien = $this->bienes->restaurar($actor, $bien);
+
+        return response()->json([
+            'message' => 'Bien restaurado desde la papelera.',
+            'data' => new BienResource($bien),
+        ]);
+    }
+
+    public function purgar(Request $request, int $bien): JsonResponse
+    {
+        $actor = $this->actor($request);
+        $this->bienes->purgar($actor, $bien);
+
+        return response()->json([
+            'message' => 'Bien eliminado definitivamente.',
+        ]);
+    }
 }

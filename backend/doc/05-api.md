@@ -45,6 +45,8 @@ Authorization: Bearer <token>
 | POST | `/api/bienes` | Profesor | Crear bien (QR y código de barras automáticos) |
 | PUT/PATCH | `/api/bienes/{cve_bien}` | Profesor (propio) | Editar bien |
 | DELETE | `/api/bienes/{cve_bien}` | Profesor (propio) | Enviar a papelera |
+| PUT | `/api/bienes/{cve_bien}/restaurar` | Profesor (propio) | Restaurar bien de la papelera (`activo=true` + bitácora "Restauración") |
+| DELETE | `/api/bienes/{cve_bien}/purgar` | Profesor (propio) | Eliminar definitivamente (borra el bien y sus dependencias) |
 
 ## Listado vs detalle (dos niveles de información)
 
@@ -139,6 +141,35 @@ Mismos campos, todos opcionales. Reglas especiales:
 ## DELETE /api/bienes/{id}
 
 Respuesta 200 con el bien actualizado (`"activo": false`).
+
+## PUT /api/bienes/{id}/restaurar
+
+Reactiva un bien de la papelera. Registra bitácora con motivo **"Restauración"**
+(catálogo `motivo_de_movimiento`, agregado por el backend).
+
+Respuesta 200: `{"message": "Bien restaurado desde la papelera.", "data": {...}}`
+
+Errores:
+| Código | Situación |
+|---|---|
+| 403 | Bien ajeno (profesor) |
+| 422 | El bien no está en la papelera (`activo=true`) |
+
+## DELETE /api/bienes/{id}/purgar
+
+Eliminación **física definitiva** de un bien de la papelera. Dentro de una
+transacción: borra `auditoria_detalle`, `prestamos` y `bitacora_movimientos`
+del bien, luego el bien. Deja un **rastro** en bitácora con `cve_bien = null`
+y motivo "Baja Definitiva" (observaciones con nombre, código de barras e
+identificador del bien eliminado).
+
+Respuesta 200: `{"message": "Bien eliminado definitivamente."}`
+
+Errores:
+| Código | Situación |
+|---|---|
+| 403 | Bien ajeno (profesor) |
+| 422 | El bien no está en la papelera, o tiene un préstamo activo |
 
 Errores posibles:
 | Código | Situación |

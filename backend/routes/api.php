@@ -16,4 +16,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('bienes', BienController::class)
         ->only(['index', 'show', 'store', 'update', 'destroy'])
         ->parameters(['bienes' => 'bien']);
+
+    Route::put('bienes/{bien}/restaurar', [BienController::class, 'restaurar']);
+    Route::delete('bienes/{bien}/purgar', [BienController::class, 'purgar']);
 });

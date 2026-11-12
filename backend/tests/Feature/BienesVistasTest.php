@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Aula;
 use App\Models\Bien;
+use App\Models\BitacoraMovimiento;
 use App\Models\Usuario;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -241,6 +242,177 @@ class BienesVistasTest extends TestCase
         $this->actingAs($this->alumno, 'sanctum')
             ->getJson('/api/bienes?vista=papelera')
             ->assertStatus(403);
+    }
+
+    // ---------------------------------------------------------------
+    // RESTAURAR Y PURGAR (ACCIONES DE LA PAPELERA)
+    // ---------------------------------------------------------------
+
+    public function test_admin_restaura_bien_de_papelera(): void
+    {
+        $bien = Bien::query()->where('activo', true)->where('estado_prestamo', 'disponible')->first();
+        $movimientosAntes = BitacoraMovimiento::count();
+
+        $this->actingAs($this->admin, 'sanctum')
+            ->deleteJson("/api/bienes/{$bien->cve_bien}")
+            ->assertStatus(200);
+
+        $this->actingAs($this->admin, 'sanctum')
+            ->putJson("/api/bienes/{$bien->cve_bien}/restaurar")
+            ->assertStatus(200)
+            ->assertJsonPath('message', 'Bien restaurado desde la papelera.');
+
+        $bien->refresh();
+        $this->assertTrue($bien->activo);
+
+        // Registra bitácora con motivo Restauración
+        $bitacoras = BitacoraMovimiento::query()
+            ->where('cve_bien', $bien->cve_bien)
+            ->get();
+        $this->assertSame($movimientosAntes + 2, BitacoraMovimiento::count());
+        $this->assertTrue($bitacoras->contains(fn ($m) => $m->motivo?->nombre_motivo === 'Restauración'));
+    }
+
+    public function test_profesor_restaura_su_bien(): void
+    {
+        $bien = Bien::query()
+            ->where('cve_encargado', 3)
+            ->where('activo', true)
+            ->where('estado_prestamo', 'disponible')
+            ->first();
+
+        $this->actingAs($this->profesor, 'sanctum')
+            ->deleteJson("/api/bienes/{$bien->cve_bien}")
+            ->assertStatus(200);
+
+        $this->actingAs($this->profesor, 'sanctum')
+            ->putJson("/api/bienes/{$bien->cve_bien}/restaurar")
+            ->assertStatus(200);
+
+        $bien->refresh();
+        $this->assertTrue($bien->activo);
+    }
+
+    public function test_no_se_restaura_bien_que_no_esta_en_papelera(): void
+    {
+        $bien = Bien::query()->where('activo', true)->first();
+
+        $this->actingAs($this->admin, 'sanctum')
+            ->putJson("/api/bienes/{$bien->cve_bien}/restaurar")
+            ->assertStatus(422);
+    }
+
+    public function test_profesor_no_restaura_bien_ajeno(): void
+    {
+        $bienAjeno = Bien::query()->where('activo', true)->where('estado_prestamo', 'disponible')->first();
+
+        $this->actingAs($this->profesor, 'sanctum')
+            ->deleteJson("/api/bienes/{$bienAjeno->cve_bien}");
+        // no llega: no es su bien
+
+        $bienAjeno->refresh();
+        $this->assertTrue($bienAjeno->activo);
+
+        // Forzarlo a papelera como admin y verificar que el profesor no puede restaurarlo
+        $this->actingAs($this->admin, 'sanctum')
+            ->deleteJson("/api/bienes/{$bienAjeno->cve_bien}")
+            ->assertStatus(200);
+
+        $this->actingAs($this->profesor, 'sanctum')
+            ->putJson("/api/bienes/{$bienAjeno->cve_bien}/restaurar")
+            ->assertStatus(403);
+    }
+
+    public function test_alumno_no_restaura_ni_purga(): void
+    {
+        $bien = Bien::query()->where('activo', true)->where('estado_prestamo', 'disponible')->first();
+
+        $this->actingAs($this->admin, 'sanctum')
+            ->deleteJson("/api/bienes/{$bien->cve_bien}")
+            ->assertStatus(200);
+
+        $this->actingAs($this->alumno, 'sanctum')
+            ->putJson("/api/bienes/{$bien->cve_bien}/restaurar")
+            ->assertStatus(403);
+
+        $this->actingAs($this->alumno, 'sanctum')
+            ->deleteJson("/api/bienes/{$bien->cve_bien}/purgar")
+            ->assertStatus(403);
+    }
+
+    public function test_admin_purga_bien_de_papelera(): void
+    {
+        $bien = Bien::query()->where('activo', true)->where('estado_prestamo', 'disponible')->first();
+
+        $this->actingAs($this->admin, 'sanctum')
+            ->deleteJson("/api/bienes/{$bien->cve_bien}")
+            ->assertStatus(200);
+
+        $rastroAntes = BitacoraMovimiento::whereNull('cve_bien')->count();
+
+        $this->actingAs($this->admin, 'sanctum')
+            ->deleteJson("/api/bienes/{$bien->cve_bien}/purgar")
+            ->assertStatus(200)
+            ->assertJsonPath('message', 'Bien eliminado definitivamente.');
+
+        // El bien y sus dependencias ya no existen
+        $this->assertNull(Bien::query()->find($bien->cve_bien));
+        $this->assertDatabaseMissing('prestamos', ['cve_bien' => $bien->cve_bien]);
+        $this->assertDatabaseMissing('bitacora_movimientos', ['cve_bien' => $bien->cve_bien]);
+
+        // Queda rastro en bitácora (cve_bien null) con motivo Baja Definitiva
+        $rastro = BitacoraMovimiento::query()
+            ->whereNull('cve_bien')
+            ->orderByDesc('cve_movimiento')
+            ->first();
+        $this->assertNotNull($rastro);
+        $this->assertStringContainsString($bien->nombre, $rastro->observaciones);
+        $this->assertStringContainsString($bien->codigo_barras, $rastro->observaciones);
+    }
+
+    public function test_no_se_purga_bien_activo(): void
+    {
+        $bien = Bien::query()->where('activo', true)->first();
+
+        $this->actingAs($this->admin, 'sanctum')
+            ->deleteJson("/api/bienes/{$bien->cve_bien}/purgar")
+            ->assertStatus(422);
+
+        $this->assertNotNull(Bien::query()->find($bien->cve_bien));
+    }
+
+    public function test_profesor_purga_su_bien(): void
+    {
+        $bien = Bien::query()
+            ->where('cve_encargado', 3)
+            ->where('activo', true)
+            ->where('estado_prestamo', 'disponible')
+            ->first();
+
+        $this->actingAs($this->profesor, 'sanctum')
+            ->deleteJson("/api/bienes/{$bien->cve_bien}")
+            ->assertStatus(200);
+
+        $this->actingAs($this->profesor, 'sanctum')
+            ->deleteJson("/api/bienes/{$bien->cve_bien}/purgar")
+            ->assertStatus(200);
+
+        $this->assertNull(Bien::query()->find($bien->cve_bien));
+    }
+
+    public function test_profesor_no_purga_bien_ajeno(): void
+    {
+        $bienAjeno = Bien::query()->where('activo', true)->where('estado_prestamo', 'disponible')->first();
+
+        $this->actingAs($this->admin, 'sanctum')
+            ->deleteJson("/api/bienes/{$bienAjeno->cve_bien}")
+            ->assertStatus(200);
+
+        $this->actingAs($this->profesor, 'sanctum')
+            ->deleteJson("/api/bienes/{$bienAjeno->cve_bien}/purgar")
+            ->assertStatus(403);
+
+        $this->assertNotNull(Bien::query()->find($bienAjeno->cve_bien));
     }
 
     // ---------------------------------------------------------------

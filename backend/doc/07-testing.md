@@ -25,11 +25,12 @@ Configuración: `phpunit.xml` usa BD separada de desarrollo (por defecto
 
 ## Suite: `tests/Feature/BienesVistasTest.php`
 
-10 tests sobre las vistas del listado: resumen de campos del listado,
-vista papelera (admin y profesor solo suya), filtro por aula, filtro por
-edificio (admin), endpoint `/api/aulas` (aulas del profesor con conteos,
-filtro por edificio para admin), bloqueo de alumno y detalle con foto +
-código de barras.
+19 tests: vistas del listado (resumen de campos, papelera, filtro por aula,
+filtro por edificio admin, endpoint `/api/aulas`, bloqueo de alumno, detalle
+con foto + código de barras) y acciones de papelera: restaurar (admin/profesor,
+bien no en papelera → 422, bien ajeno → 403, alumno → 403) y purgar
+(borrado físico con dependencias, rastro en bitácora, bien activo → 422,
+bien ajeno → 403).
 
 ## Qué cubre
 

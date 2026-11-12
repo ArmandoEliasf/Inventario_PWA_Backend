@@ -221,11 +221,56 @@ barras. Nota: para papelerizar en tests elegir bienes con
 
 Suite completa: 35 tests / 189 aserciones.
 
+## 14. Acciones de la papelera: restaurar y purgar (2026-11-12)
+
+Complemento de §13: la papelera deja de ser de solo lectura y gana las dos
+acciones pendientes (botones del frontend).
+
+### Endpoints
+
+- `PUT /api/bienes/{id}/restaurar` — reactiva un bien de la papelera
+  (`activo = true`) y registra bitácora con motivo **"Restauración"**.
+  Errores: 403 (bien ajeno), 422 (no está en la papelera).
+- `DELETE /api/bienes/{id}/purgar` — borrado **físico** del bien. Reglas:
+  solo bienes de la papelera y `disponible`. En transacción: crea rastro en
+  bitácora (motivo "Baja Definitiva", `cve_bien = null`, observaciones con
+  nombre + código de barras + identificador), borra `auditoria_detalle`,
+  `prestamos` y `bitacora_movimientos` del bien, y finalmente el bien.
+  Errores: 403 (bien ajeno), 422 (bien activo o préstamo activo).
+
+### Implementación
+
+- `BienesService::restaurar()` y `BienesService::purgar()`.
+- `BienController::restaurar()` / `BienController::purgar()`.
+- Rutas nuevas en `routes/api.php` (junto al `apiResource`).
+- `CatalogosSeeder` agrega al catálogo el motivo **"Restauración"**
+  (`requiere_aprobacion = false`); no existe en el dump original.
+- El borrado físico es viable porque las FKs de `bienes` solo apuntan hacia
+  afuera (no hay tablas hijas que impidan `delete` más allá de las tres
+  dependencias borradas en cascada manual).
+
+### Notas técnicas
+
+- Reparado de nuevo el BOM/mojibake al editar con PowerShell 5.1 (ver §9.1):
+  `Set-Content` decodificó ANSI un archivo UTF-8 sin BOM y corrompió acentos
+  en `tests/Feature/BienesVistasTest.php`; se recuperó re-encodeando
+  (UTF-8 → bytes → 1252 → bytes → UTF-8).
+
+### Tests (+9 en `BienesVistasTest.php`)
+
+Restaurar: admin (200 + bitácora "Restauración"), profesor (su bien), bien
+fuera de papelera (422), bien ajeno (403), alumno (403). Purgar: admin (bien +
+dependencias eliminados, rastro en bitácora), profesor (su bien), bien activo
+(422), bien ajeno (403), alumno (403).
+
+Suite completa: 44 tests / 222 aserciones.
+
 ## 10. Pendientes
 
 - [x] CRUD de bienes con pautas de negocio (ver §11).
 - [x] Autenticación con Sanctum: login/logout/me + rutas protegidas (ver §12).
 - [x] Vistas del listado de bienes: general / por aula / papelera + `/api/aulas` (ver §13).
+- [x] Acciones de la papelera: restaurar y borrar definitivamente (ver §14).
 - [ ] Conexión a Supabase (PostgreSQL 18) — requiere credenciales del proyecto.
 - [ ] Colección de Bruno para pruebas de endpoints.
 - [ ] Eliminar/adaptar `User.php` por defecto según decisión de auth.
