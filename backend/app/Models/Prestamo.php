@@ -26,6 +26,12 @@ class Prestamo extends Model
         'observaciones',
     ];
 
+    protected $casts = [
+        'fecha_solicitud' => 'datetime',
+        'fecha_devolucion_pactada' => 'datetime',
+        'fecha_devolucion_real' => 'datetime',
+    ];
+
     public function bien(): BelongsTo
     {
         return $this->belongsTo(Bien::class, 'cve_bien', 'cve_bien');

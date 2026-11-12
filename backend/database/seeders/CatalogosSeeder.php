@@ -30,10 +30,16 @@ class CatalogosSeeder extends Seeder
             DB::table('motivo_de_movimiento')->insert($row);
         }
 
-        // Motivo adicional del backend (no existe en el dump): restaurar
-        // bienes desde la papelera registra su movimiento en bitácora.
+        // Motivos adicionales del backend (no existen en el dump): la
+        // restauración de la papelera y el módulo de préstamos registran
+        // sus movimientos en bitácora.
         DB::table('motivo_de_movimiento')->insert([
             'nombre_motivo' => 'Restauración',
+            'requiere_aprobacion' => false,
+        ]);
+
+        DB::table('motivo_de_movimiento')->insert([
+            'nombre_motivo' => 'Devolución',
             'requiere_aprobacion' => false,
         ]);
 

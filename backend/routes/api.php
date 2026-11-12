@@ -3,6 +3,7 @@
 use App\Http\Controllers\AulaController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BienController;
+use App\Http\Controllers\PrestamoController;
 use Illuminate\Support\Facades\Route;
 
 Route::post('login', [AuthController::class, 'login'])->middleware('throttle:10,1');
@@ -19,4 +20,13 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::put('bienes/{bien}/restaurar', [BienController::class, 'restaurar']);
     Route::delete('bienes/{bien}/purgar', [BienController::class, 'purgar']);
+
+    Route::get('prestamos', [PrestamoController::class, 'index']);
+    Route::post('prestamos', [PrestamoController::class, 'store']);
+    Route::post('prestamos/{prestamo}/aceptar', [PrestamoController::class, 'aceptar'])
+        ->whereNumber('prestamo');
+    Route::post('prestamos/{prestamo}/devolver', [PrestamoController::class, 'devolver'])
+        ->whereNumber('prestamo');
+    Route::post('prestamos/{prestamo}/confirmar-devolucion', [PrestamoController::class, 'confirmarDevolucion'])
+        ->whereNumber('prestamo');
 });

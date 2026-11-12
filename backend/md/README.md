@@ -2,7 +2,7 @@
 
 > Documento generado el 2026-11-11. Describe de forma técnica todo lo implementado
 > en la fase de migraciones, modelos, observers y seeders del backend Laravel 12.
-> Última sesión documentada: §15 (conexión Supabase + expiración de tokens, 2026-11-12).
+> Última sesión documentada: §16 (módulo de préstamos, 2026-11-12).
 
 ## 1. Contexto
 
@@ -297,15 +297,64 @@ Suite completa: 44 tests / 222 aserciones.
 
 Suite completa: **45 tests / 223 aserciones**.
 
+## 16. Módulo de préstamos (2026-11-12, branch `feature-prestamos`)
+
+Flujo de estados: `pendiente → aprobado → por_devolver → devuelto`. El
+detalle de endpoints y reglas está en `doc/05-api.md` (sección "Préstamos").
+
+### Pautas acordadas
+
+- Cualquier rol puede solicitar cualquier bien **con encargado**; el
+  encargado no puede solicitar su propio bien (422).
+- Solicitud válida solo con bien activo (fuera de papelera), `disponible`
+  y sin otro préstamo activo (`pendiente`/`aprobado`/`por_devolver`).
+- Aceptar (`pendiente → aprobado`): solo el encargado del bien o admin.
+  **Admin solicitante: auto-aprobado** al crear la solicitud.
+- Devolver (`aprobado → por_devolver`): solo el solicitante. **Admin
+  solicitante: directo a `devuelto`** sin confirmación del dueño.
+- Confirmar devolución (`por_devolver → devuelto`): encargado del bien o
+  admin. El bien queda `disponible`.
+- El bien está `prestado` desde la aprobación y mientras esté `por_devolver`
+  (físicamente sigue fuera); vuelve a `disponible` con `devuelto`.
+
+### Implementación
+
+- `app/Services/PrestamosService.php` — reglas, transacciones, bitácora
+  (motivos "Préstamo" y "Devolución"), `tienePrestamoActivo()`, vistas de
+  listado `solicitados`/`recibidos` con visibilidad por rol.
+- `app/Http/Controllers/PrestamoController.php` — index/store/aceptar/
+  devolver/confirmarDevolucion (actor vía Sanctum).
+- `app/Http/Requests/StorePrestamoRequest.php` — `cve_bien` exists,
+  `fecha_devolucion_pactada` date nullable, `observaciones` max 500.
+- `app/Http/Resources/PrestamoResource.php` — bien resumen + solicitante.
+- `routes/api.php` — `/api/prestamos` (GET/POST) y las tres acciones POST.
+- `app/Models/Prestamo.php` — casts `datetime` para las tres fechas
+  (el Resource serializa `toDateTimeString()`).
+- `CatalogosSeeder` — motivo **"Devolución"** (`requiere_aprobacion=false`;
+  no existía en el dump, igual que "Restauración").
+- El `PrestamoObserver` sincroniza el bien en `updated()`; un préstamo
+  creado directamente como `aprobado` (admin) marca el bien en
+  `PrestamosService::solicitar()` (el observer no reacciona a `created`).
+
+### Tests (`tests/Feature/PrestamosTest.php`, 21 tests)
+
+Flujo completo alumno→profesor, auto-aprobado y auto-devolución del admin,
+bloqueos (bien prestado/en papelera/propio/duplicado, estados inválidos,
+validación de campos), permisos (403 para no encargado/solicitante) y
+listados `solicitados`/`recibidos` con visibilidad por rol.
+
+Suite completa: **66 tests / 280 aserciones**.
+
 ## 10. Pendientes
 
 - [x] CRUD de bienes con pautas de negocio (ver §11).
 - [x] Autenticación con Sanctum: login/logout/me + rutas protegidas (ver §12).
 - [x] Vistas del listado de bienes: general / por aula / papelera + `/api/aulas` (ver §13).
 - [x] Acciones de la papelera: restaurar y borrar definitivamente (ver §14).
-- [x] Conexión a Supabase — configurada por pooler en `.env` (ver §15.1).
+- [x] Conexión a Supabase - configurada por pooler en `.env` (ver §15.1).
+- [x] Módulo de préstamos: solicitud, aceptación, devolución y confirmación (ver §16).
 - [ ] Colección de Bruno para pruebas de endpoints.
-- [ ] Eliminar/adaptar `User.php` por defecto según decisión de auth.
+- [x] Eliminar/adaptar `User.php` por defecto según decisión de auth (commit c07a28b).
 
 ## 11. CRUD de bienes — pautas y implementación
 

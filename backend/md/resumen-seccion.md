@@ -214,9 +214,34 @@ Configuración: `FRONTEND_URL` en `.env` y `config/services.php`.
 
 ---
 
+## 5bis. Módulo de préstamos
+
+Flujo: `pendiente → aprobado → por_devolver → devuelto` (ver detalle en
+`doc/05-api.md`). Reglas acordadas:
+
+- Cualquier rol puede solicitar cualquier bien **con encargado**.
+- El encargado no puede solicitar su propio bien (422).
+- Solicitud: bien activo, `disponible` y sin otro préstamo activo.
+- `aprobado`: lo marca el encargado del bien o un admin. Un admin que
+  solicita queda **auto-aprobado**.
+- `por_devolver`: el solicitante registra la devolución; el bien sigue
+  `prestado` hasta la confirmación.
+- `devuelto`: lo confirma el encargado o un admin. Un admin que devuelve
+  va directo a `devuelto` (sin confirmación del dueño).
+- El bien queda `disponible` al finalizar; `prestado` desde la aprobación
+  (`PrestamoObserver`).
+- Bitácora: motivos "Préstamo" y "Devolución" ("Devolución" se agregó al
+  `CatalogosSeeder`, no existía en el dump).
+
+Archivos: `PrestamosService` (reglas + transacciones + bitácora),
+`PrestamoController`, `StorePrestamoRequest`, `PrestamoResource` (bien
+resumen + solicitante), rutas `/api/prestamos*`.
+
+---
+
 ## 6. Testing
 
-`php artisan test` → **45 tests, 223 aserciones**.
+`php artisan test` → **66 tests, 280 aserciones**.
 
 - `tests/Feature/AuthTest.php` (7): login correcto (token+rol), contraseña
   incorrecta, usuario inexistente, usuario inactivo, consumo de endpoint con
@@ -232,6 +257,12 @@ Configuración: `FRONTEND_URL` en `.env` y `config/services.php`.
   (aulas del profesor con conteos, filtro por edificio), bloqueo de alumno,
   detalle con foto y código de barras, restaurar y purgar (permisos,
   validaciones, borrado físico con dependencias y rastro en bitácora).
+- `tests/Feature/PrestamosTest.php` (21): flujo completo alumno→profesor
+  (pendiente, aceptación, bien `prestado`, devolución `por_devolver`,
+  confirmación `devuelto`, bien `disponible`), auto-aprobado y auto-devolución
+  del admin, bloqueos (bien prestado/en papelera/propio/duplicado, estados
+  inválidos), permisos (403) y listados `solicitados`/`recibidos` con
+  visibilidad por rol.
 
 Convención: `RefreshDatabase` + seed completo en cada test; asserts de negocio
 sobre modelos (`refresh()`), no solo sobre el JSON de respuesta.

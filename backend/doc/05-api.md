@@ -47,6 +47,40 @@ Authorization: Bearer <token>
 | DELETE | `/api/bienes/{cve_bien}` | Profesor (propio) | Enviar a papelera |
 | PUT | `/api/bienes/{cve_bien}/restaurar` | Profesor (propio) | Restaurar bien de la papelera (`activo=true` + bitácora "Restauración") |
 | DELETE | `/api/bienes/{cve_bien}/purgar` | Profesor (propio) | Eliminar definitivamente (borra el bien y sus dependencias) |
+| GET | `/api/prestamos?vista=solicitados\|recibidos&per_page=20` | Cualquier rol | Préstamos solicitados por el actor / sobre sus bienes (admin: todos) |
+| POST | `/api/prestamos` | Cualquier rol | Solicitar préstamo. Admin: auto-aprobado |
+| POST | `/api/prestamos/{id}/aceptar` | Encargado del bien / admin | `pendiente → aprobado` |
+| POST | `/api/prestamos/{id}/devolver` | Solicitante | `aprobado → por_devolver` (admin: directo `devuelto`) |
+| POST | `/api/prestamos/{id}/confirmar-devolucion` | Encargado del bien / admin | `por_devolver → devuelto` |
+
+## Préstamos
+
+Flujo de estados del préstamo y efecto en `bienes.estado_prestamo`:
+
+| Estado préstamo | ¿Quién lo marca? | Efecto en el bien |
+|---|---|---|
+| `pendiente` | Se crea con la solicitud | sigue `disponible` |
+| `aprobado` | Encargado del bien o admin (aceptar). **Admin solicitante: auto-aprobado al crear** | `prestado` |
+| `por_devolver` | Solicitante registra la devolución | sigue `prestado` |
+| `devuelto` | Encargado del bien o admin confirma. **Admin solicitante: al devolver va directo a `devuelto`** | `disponible` |
+
+Reglas de la solicitud (`POST /api/prestamos` con `cve_bien`,
+`fecha_devolucion_pactada?`, `observaciones?`):
+
+- El bien debe estar activo (fuera de papelera), `disponible`, con encargado
+  asignado y sin otro préstamo activo (`pendiente`/`aprobado`/`por_devolver`).
+- El encargado no puede solicitar su propio bien (422).
+- Cualquier rol puede solicitar cualquier bien con encargado.
+- Bitácora: motivo "Préstamo" (solicitud/aceptación) y "Devolución"
+  (registro/confirmación); ambos existen en `CatalogosSeeder`.
+- La sincronización del bien vive en `PrestamoObserver` (`aprobado` →
+  `prestado`, `devuelto` → `disponible`); un préstamo creado directamente
+  como `aprobado` marca el bien en `PrestamosService::solicitar()`.
+
+Respuesta del listado (`PrestamoResource`): `cve_prestamo`,
+`estado_prestamo`, `fecha_solicitud`, `fecha_devolucion_pactada`,
+`fecha_devolucion_real`, `observaciones`, `bien` (resumen: identificador,
+nombre, estado físico, encargado) y `solicitante`.
 
 ## Listado vs detalle (dos niveles de información)
 
