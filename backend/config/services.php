@@ -35,4 +35,18 @@ return [
         ],
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Frontend PWA
+    |--------------------------------------------------------------------------
+    |
+    | URL base de la PWA para construir los deep links del código QR.
+    | En pruebas: http://localhost:5173 (o el puerto del frontend).
+    |
+    */
+
+    'frontend' => [
+        'url' => env('FRONTEND_URL', 'http://localhost:5173'),
+    ],
+
 ];

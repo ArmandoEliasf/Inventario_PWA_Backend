@@ -164,8 +164,69 @@ Orquesta: `CatalogosSeeder` → `InventarioDemoSeeder`.
 
 ## 10. Pendientes
 
+- [x] CRUD de bienes con pautas de negocio (ver §11).
 - [ ] Conexión a Supabase (PostgreSQL 18) — requiere credenciales del proyecto.
-- [ ] Autenticación (Sanctum u otra alternativa) — en decisión.
-- [ ] API routes (`routes/api.php`), controllers, form requests y resources.
+- [ ] Autenticación (Sanctum u otra alternativa) — en decisión; el CRUD usa un
+      header temporal `X-Usuario` (ver §11.1).
 - [ ] Colección de Bruno para pruebas de endpoints.
 - [ ] Eliminar/adaptar `User.php` por defecto según decisión de auth.
+
+## 11. CRUD de bienes — pautas y implementación
+
+### 11.1 Pautas acordadas
+
+| Regla | Definición |
+|---|---|
+| Código de barras | `{TIPO}-{FAMILIA}-{ARTICULO}-{IDENTIFICADOR}` — ej. `MO-MD-1583-0000001`. Se arma con las claves de tipo de bien, familia y artículo del catálogo, más un identificador numérico de **exactamente 7 dígitos** que pone el usuario (se guarda como string para conservar ceros iniciales). |
+| Identificador = no_serie | El identificador que captura el usuario **llena la columna `no_serie`** (UNIQUE → unicidad global del identificador). La API no expone `no_serie` como campo propio: se devuelve como `identificador`. |
+| Código QR | Generado automáticamente al crear: en BD se guarda `bienes/{cve_bien}`. La URL completa se construye en runtime con `FRONTEND_URL` del `.env` (config `services.frontend.url`), ej. `http://localhost:5173/bienes/5`. Cambiar de dominio solo requiere editar el `.env`. |
+| Roles | Administrador: todo. Profesor: crea/edita/papeleriza **solo sus propios bienes** (donde `cve_encargado` = su persona). Alumno (rol Estudiante): no consulta ni modifica el inventario. |
+| Registro de usuarios | Fuera del alcance de la API: lo hace el área de programación directamente en la BD. |
+| Papelera | Eliminar = `activo=false` (nunca delete físico). Bloqueado si `estado_prestamo != 'disponible'`. Registra bitácora con motivo "Baja Definitiva". |
+| Estados físicos | `bueno`, `regular`, `deteriorado` (constante `BienesService::ESTADOS_FISICOS`). |
+
+### 11.2 Archivos
+
+- `app/Services/CodigoBarrasService.php` — construcción del código de barras
+  (artículo → familia → tipo) y verificación de unicidad.
+- `app/Services/BienesService.php` — lógica de negocio: `listar`, `obtener`,
+  `crear`, `editar`, `enviarPapelera`, `urlQr`, helpers de rol
+  (`rolDe`, `esAdmin`, `esProfesor`, `puedeConsultar`).
+  - En `crear()`: profesor queda como encargado; admin puede asignar
+    cualquier `cve_encargado`. QR se inserta con `saveQuietly()` (sin eventos)
+    dentro de transacción.
+  - En `editar()`: si cambia el artículo se re-genera el prefijo
+    TIPO-FAMILIA-ARTICULO conservando el identificador; unicidad excluye al propio bien.
+  - `enviarPapelera()`: transacción + bitácora (motivo "Baja Definitiva").
+- `app/Http/Requests/StoreBienRequest.php` / `UpdateBienRequest.php` —
+  validación del identificador (`regex:/^[0-9]{7}$/`), unicidades de
+  `no_serie`/`no_factura`, exists de FKs, estados físicos permitidos.
+- `app/Http/Controllers/BienController.php` — endpoints del `apiResource`.
+  Resuelve el actor con el **header temporal `X-Usuario`** (cve_usuario)
+  porque aún no existe autenticación; marcar `TODO` para cambiar por
+  `$request->user()` con Sanctum.
+- `app/Http/Resources/BienResource.php` — serialización con catálogos cargados.
+- `routes/api.php` — `apiResource bienes` (index, show, store, update, destroy).
+- `bootstrap/app.php` — se registró `api: routes/api.php`.
+- `config/services.php` + `.env` — `FRONTEND_URL` (default `http://localhost:5173`).
+
+### 11.3 Endpoints
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/api/bienes?per_page=20` | Listado paginado (profesor: solo suyos; admin: todos; alumno: 403) |
+| GET | `/api/bienes/{cve_bien}` | Detalle + `qr_url` completa para pintar el QR |
+| POST | `/api/bienes` | Crear (requiere `cve_articulo`, `nombre`, `identificador` de 7 dígitos) |
+| PUT/PATCH | `/api/bienes/{cve_bien}` | Editar (re-genera código de barras si cambia el artículo) |
+| DELETE | `/api/bienes/{cve_bien}` | Papelera (solo bienes `disponible`) |
+
+Todos requieren header `X-Usuario` (temporal hasta implementar auth).
+
+### 11.4 Cobertura de tests (`tests/Feature/BienesCrudTest.php`)
+
+19 tests / 63 aserciones, cubriendo: formato de código de barras y QR,
+encargado auto-asignado al profesor, identificador de 7 dígitos y ceros
+iniciales, unicidad del identificador por artículo, bloqueo de alumno en
+creación/consulta, visibilidad por propiedad (profesor solo sus bienes),
+edición con re-generación de prefijo, papelera con bitácora, bloqueo de
+bienes prestados, acceso ajeno → 403 y rechazo sin `X-Usuario`.

@@ -38,6 +38,15 @@ class Bien extends Model
         'fecha_registro',
     ];
 
+    protected function casts(): array
+    {
+        return [
+            'activo' => 'boolean',
+            'costo_unitario' => 'decimal:2',
+            'fecha_registro' => 'date',
+        ];
+    }
+
     public function modelo(): BelongsTo
     {
         return $this->belongsTo(Modelo::class, 'cve_modelo', 'cve_modelo');
