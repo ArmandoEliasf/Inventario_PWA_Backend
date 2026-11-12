@@ -162,12 +162,28 @@ Orquesta: `CatalogosSeeder` → `InventarioDemoSeeder`.
    iteración solo capturaba 1 de 19 bloques de `articulos`, y el tokenizer separaba
    valores antes de filtrar filas con identificadores del bloque `DO`.
 
+## 12. Autenticación con Sanctum
+
+Implementada después del CRUD (antes se usaba el header temporal `X-Usuario`):
+
+- `composer require laravel/sanctum` (v4.4) + migración `personal_access_tokens`.
+- `Usuario` usa `HasApiTokens`; `config/auth.php` apunta el provider al modelo
+  `App\Models\Usuario`.
+- `AuthController`: `login` (valida usuario/contrasena contra `usuarios`,
+  con `Hash::check` sobre `contrasena_hash` vía `getAuthPassword()`), `logout`
+  (revoca el token actual) y `me` (perfil + rol).
+- `routes/api.php`: `/login` público con `throttle:10,1`; todo lo demás dentro
+  de `auth:sanctum`. `BienController::actor()` = `$request->user()`.
+- Tests: `tests/Feature/AuthTest.php` (login ok, contraseña/usuario inválido,
+  usuario inactivo, consumo de endpoint con Bearer token, revocación en logout)
+  y `BienesCrudTest` migrado de `X-Usuario` a `actingAs(..., 'sanctum')`.
+- Suite completa: 25 tests / 83 aserciones.
+
 ## 10. Pendientes
 
 - [x] CRUD de bienes con pautas de negocio (ver §11).
+- [x] Autenticación con Sanctum: login/logout/me + rutas protegidas (ver §12).
 - [ ] Conexión a Supabase (PostgreSQL 18) — requiere credenciales del proyecto.
-- [ ] Autenticación (Sanctum u otra alternativa) — en decisión; el CRUD usa un
-      header temporal `X-Usuario` (ver §11.1).
 - [ ] Colección de Bruno para pruebas de endpoints.
 - [ ] Eliminar/adaptar `User.php` por defecto según decisión de auth.
 

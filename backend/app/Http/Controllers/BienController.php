@@ -18,25 +18,11 @@ class BienController extends Controller
     ) {}
 
     /**
-     * Resuelve el actor. TEMPORAL: mientras no exista autenticación,
-     * el usuario llega por el header X-Usuario (cve_usuario).
-     * TODO: reemplazar por $request->user() cuando se integre auth.
+     * El actor llega autenticado vía Sanctum (middleware auth:sanctum).
      */
     private function actor(Request $request): Usuario
     {
-        $cveUsuario = $request->header('X-Usuario');
-
-        if (! $cveUsuario || ! is_numeric($cveUsuario)) {
-            abort(401, 'Falta el header X-Usuario (identificador del usuario).');
-        }
-
-        $usuario = Usuario::query()->with('role')->find((int) $cveUsuario);
-
-        if (! $usuario || ! $usuario->activo) {
-            abort(401, 'Usuario inválido o inactivo.');
-        }
-
-        return $usuario;
+        return $request->user();
     }
 
     public function index(Request $request): AnonymousResourceCollection

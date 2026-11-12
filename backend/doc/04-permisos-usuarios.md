@@ -32,22 +32,24 @@ existentes (login y permisos, cuando exista auth).
 - La verificación ocurre en `BienesService::obtener()`, que es el punto de entrada
   de `editar()` y `enviarPapelera()` (evita divergencias de reglas entre acciones).
 
-## Resolución del actor (TEMPORAL)
+## Resolución del actor
 
-Mientras no exista autenticación, `BienController::actor()` toma el header:
+Autenticación por **Laravel Sanctum** (token bearer):
 
-```
-X-Usuario: <cve_usuario>
-```
+1. `POST /api/login` con `{"usuario": "...", "contrasena": "..."}` → devuelve
+   `token` (formato `id|texto`), datos del usuario y su rol.
+2. La PWA guarda el token y envía en cada petición:
+   `Authorization: Bearer <token>`.
+3. `BienController::actor()` = `$request->user()` (resuelto por el middleware
+   `auth:sanctum`). Rutas protegidas en `routes/api.php`.
+4. `POST /api/logout` revoca el token actual; `GET /api/me` devuelve el perfil.
+5. Si el token es inválido/expirado → 401; usuario con `activo=false` no puede
+   hacer login.
 
-- Sin header o usuario inexistente/inactivo → **401**.
-- El service verifica el rol leyendo la relación `usuario.role.nombre`.
-- **TODO**: al integrar Sanctum (o el mecanismo que se decida), reemplazar por
-  `$request->user()` y proteger las rutas con middleware. El header actual es
-  solo para poder probar con Bruno/Postman durante el desarrollo.
+El login valida contra `usuarios.usuario` y `usuarios.contrasena_hash`
+(`Hash::check`, bcrypt) vía `Usuario::getAuthPassword()`.
 
 ## Futuras extensiones previstas
 
-- Login de la PWA (alumnos solo para préstamos propios, profesores para
-  inventario suyo, admin para todo).
+- Expiración de tokens (`SANCTUM_...` / abilities).
 - `Director`: reportes generales (tabla `auditorias`, bitácora).

@@ -4,9 +4,12 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User;
+use Laravel\Sanctum\HasApiTokens;
 
 class Usuario extends User
 {
+    use HasApiTokens;
+
     protected $table = 'usuarios';
 
     protected $primaryKey = 'cve_usuario';
