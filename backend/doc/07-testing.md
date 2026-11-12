@@ -12,6 +12,15 @@ Configuración: `phpunit.xml` usa BD separada de desarrollo (por defecto
 `:memory:`/archivo de tests según env del proyecto Laravel 12) y
 `RefreshDatabase` re-crea el esquema + seed en cada test.
 
+## Suite: `tests/Feature/AuthTest.php`
+
+7 tests: login correcto (estructura `token` + `usuario.rol`), contraseña
+incorrecta (422), usuario inexistente (422), usuario inactivo (422), consumo
+de endpoint protegido con Bearer token, revocación en logout (el token
+desaparece de `personal_access_tokens`) y **expiración de token**: al atrasar
+`created_at` del token más allá de `SANCTUM_TOKEN_EXPIRATION` (480 min),
+el endpoint protegido responde 401.
+
 ## Suite: `tests/Feature/BienesCrudTest.php`
 
 19 tests, 65 aserciones. Datos: se siembra la BD demo completa en cada test
@@ -22,6 +31,15 @@ Configuración: `phpunit.xml` usa BD separada de desarrollo (por defecto
 | `$this->admin` | 1 | Administrador |
 | `$this->profesor` | 3 | Profesor (persona 3) |
 | `$this->alumno` | 4 | Estudiante |
+
+## Suite: `tests/Feature/BienesVistasTest.php`
+
+19 tests: vistas del listado (resumen de campos, papelera, filtro por aula,
+filtro por edificio admin, endpoint `/api/aulas`, bloqueo de alumno, detalle
+con foto + código de barras) y acciones de papelera: restaurar (admin/profesor,
+bien no en papelera → 422, bien ajeno → 403, alumno → 403) y purgar
+(borrado físico con dependencias, rastro en bitácora, bien activo → 422,
+bien ajeno → 403).
 
 ## Qué cubre
 
@@ -59,7 +77,6 @@ Configuración: `phpunit.xml` usa BD separada de desarrollo (por defecto
 
 Convenciones:
 1. `use RefreshDatabase;` + `$this->seed()` en `setUp()`.
-2. Peticiones por `getJson/postJson/putJson/deleteJson` con header
-   `['X-Usuario' => $this->admin]`.
+2. Peticiones por `getJson/postJson/putJson/deleteJson` con `actingAs(..., 'sanctum')`.
 3. Asserts de negocio sobre el modelo fresco (`$bien->refresh()`), no solo sobre
    la respuesta JSON.

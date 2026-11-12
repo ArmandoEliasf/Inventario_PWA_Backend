@@ -80,4 +80,19 @@ class AuthTest extends TestCase
         // el token ya no existe en la BD
         $this->assertSame(0, DB::table('personal_access_tokens')->count());
     }
+
+    public function test_token_expira_pasada_la_ventana_configurada(): void
+    {
+        $token = $this->postJson('/api/login', $this->credenciales())
+            ->json('token');
+
+        // atrasa created_at mas alla de SANCTUM_TOKEN_EXPIRATION (480 min)
+        DB::table('personal_access_tokens')
+            ->where('tokenable_id', Usuario::where('usuario', 'admin')->value('cve_usuario'))
+            ->update(['created_at' => now()->subMinutes(481)]);
+
+        $this->withHeader('Authorization', "Bearer {$token}")
+            ->getJson('/api/me')
+            ->assertStatus(401);
+    }
 }

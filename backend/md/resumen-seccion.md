@@ -13,7 +13,7 @@
 | Proyecto | Módulo de inventario para una PWA (solo backend) |
 | Framework | Laravel 12, PHP 8.2+ |
 | BD desarrollo | SQLite (`database/database.sqlite`) |
-| BD producción | PostgreSQL 18 vía Supabase (pendiente conectar) |
+| BD producción | PostgreSQL vía Supabase (conectado por pooler, ver §4.1) |
 | Origen del esquema | `database/bd-datos reales.sql` (dump PostgreSQL con datos reales UTC) |
 | Testing | PHPUnit (25 tests / 83 aserciones, todos en verde) |
 | Cliente de pruebas | Bruno (colección pendiente) |
@@ -113,6 +113,27 @@ php artisan migrate:fresh --seed   # reconstruir todo
 - Rutas protegidas con `auth:sanctum`; la PWA envía
   `Authorization: Bearer <token>` en cada petición.
 
+### 4.1 Expiración de tokens
+
+- `config/sanctum.php` publicado (Laravel 12 no lo genera por defecto).
+- `expiration` = `env('SANCTUM_TOKEN_EXPIRATION', 480)` → los tokens viven
+  **8 horas**; configurable desde `.env`.
+- Sanctum valida que `created_at` esté dentro de la ventana; tokens con
+  `expires_at` propio también se respetan si se definieran.
+- Test: `test_token_expira_pasada_la_ventana_configurada` atrasa `created_at`
+  481 minutos y verifica 401.
+
+### 4.2 Variables de entorno
+
+| Variable | Uso |
+|---|---|
+| `DB_CONNECTION/DB_HOST/...` | Conexión a Supabase por pooler (`pgsql`, host `aws-1-<region>.pooler.supabase.com`, usuario `postgres.<ref>`, `DB_SSLMODE=require`) |
+| `SANCTUM_TOKEN_EXPIRATION` | Ventana de validez del token en minutos |
+| `SUPABASE_URL` | Base URL de la Data API del proyecto |
+| `SUPABASE_PUBLISHABLE_KEY` | Clave pública (solo cliente, limitada por RLS del proyecto) |
+| `SUPABASE_SECRET_KEY` | Clave server-side; nunca exponer al frontend |
+| `SUPABASE_JWKS_URL` | JWKS de Auth (uso futuro) |
+
 ---
 
 ## 5. CRUD de bienes
@@ -125,7 +146,7 @@ php artisan migrate:fresh --seed   # reconstruir todo
 | Identificador | Exactamente 7 dígitos numéricos, guardado como **string** (conserva ceros iniciales). **Llena la columna `no_serie`**, que es UNIQUE → unicidad global. La API lo expone como `identificador`, nunca como `no_serie`. |
 | Código QR | Automático al crear: en BD se guarda `bienes/{cve_bien}`; la URL completa se arma en runtime con `FRONTEND_URL` del `.env` (ej. `http://localhost:5173/bienes/5`). Cambiar de dominio no requiere regenerar nada. |
 | Al cambiar el artículo | El prefijo del código de barras se re-genera conservando el identificador. |
-| Papelera | `DELETE` = `activo=false` (nunca borrado físico). Bloqueado si el bien está `prestado`. Registra bitácora con motivo "Baja Definitiva". |
+| Papelera | `DELETE` = `activo=false` (nunca borrado físico). Bloqueado si el bien está `prestado`. Registra bitácora con motivo "Baja Definitiva". Desde la papelera: `PUT .../restaurar` reactiva (motivo "Restauración") y `DELETE .../purgar` borra físicamente (borra dependencias y deja rastro en bitácora con `cve_bien = null`). |
 | Estados físicos | `bueno` (default), `regular`, `deteriorado` |
 | Estados de préstamo | `disponible` ↔ `prestado` (sincronizado por observer) |
 
@@ -151,13 +172,33 @@ php artisan migrate:fresh --seed   # reconstruir todo
 | POST | `/api/login` | Login → token |
 | GET | `/api/me` | Perfil autenticado |
 | POST | `/api/logout` | Cerrar sesión |
-| GET | `/api/bienes?per_page=20&page=1` | Listado paginado (filtrado por rol) |
-| GET | `/api/bienes/{id}` | Detalle + `qr_url` |
+| GET | `/api/aulas?cve_edificio=X` | Pestañas "por aula" con conteo (profesor: sus aulas; admin: todas) |
+| GET | `/api/bienes?vista=general\|papelera&cve_aula=X&cve_edificio=X` | Listado resumido paginado (filtrado por rol) |
+| GET | `/api/bienes/{id}` | Detalle completo + `qr_url` + foto + código de barras |
 | POST | `/api/bienes` | Crear |
 | PUT/PATCH | `/api/bienes/{id}` | Editar |
 | DELETE | `/api/bienes/{id}` | Papelera |
+| PUT | `/api/bienes/{id}/restaurar` | Restaurar de la papelera (bitácora "Restauración") |
+| DELETE | `/api/bienes/{id}/purgar` | Borrado definitivo (con rastro en bitácora) |
 
-### 5.4 Arquitectura del módulo
+### 5.4 Vistas del listado de bienes
+
+Tres vistas para profesor, dos para admin, resueltas con parámetros del mismo
+endpoint (no hay rutas aparte):
+
+| Vista | Parámetro | Profesor | Administrador |
+|---|---|---|---|
+| General | `vista=general` (default) | sus bienes activos | todos los bienes activos |
+| Por aula | `+ cve_aula=X` | sus bienes de esa aula (pestañas desde `GET /api/aulas`) | bienes de esa aula |
+| Por edificio | `+ cve_edificio=X` | — | bienes de todas las aulas del edificio |
+| Papelera | `vista=papelera` | su papelera | toda la papelera |
+
+Dos niveles de información: el listado (`BienResumenResource`) entrega solo
+`cve_bien`, `identificador`, `nombre`, `encargado` y `estado_fisico`; el detalle
+(`BienResource`) entrega todo, incluidos `foto_url`, `foto_drive_id` y
+`codigo_barras`, más `qr_url` calculada.
+
+### 5.5 Arquitectura del módulo
 
 ```
 routes/api.php
@@ -175,15 +216,22 @@ Configuración: `FRONTEND_URL` en `.env` y `config/services.php`.
 
 ## 6. Testing
 
-`php artisan test` → **25 tests, 83 aserciones**.
+`php artisan test` → **45 tests, 223 aserciones**.
 
-- `tests/Feature/AuthTest.php` (6): login correcto (token+rol), contraseña
+- `tests/Feature/AuthTest.php` (7): login correcto (token+rol), contraseña
   incorrecta, usuario inexistente, usuario inactivo, consumo de endpoint con
-  Bearer token, revocación en logout.
+  Bearer token, revocación en logout y expiración del token por ventana
+  configurada.
 - `tests/Feature/BienesCrudTest.php` (19): formato de códigos, encargado
   automático, identificador (7 dígitos, ceros, unicidad global), bloqueos de
   alumno, visibilidad por propiedad, edición con re-generación de prefijo,
   papelera con bitácora, bienes prestados, acceso ajeno (403), sin token (401).
+- `tests/Feature/BienesVistasTest.php` (19): listado resumido (campos exactos),
+  vista papelera (admin/profesor, solo bienes inactivos y solo propios),
+  filtro por aula, filtro por edificio (admin), endpoint `/api/aulas`
+  (aulas del profesor con conteos, filtro por edificio), bloqueo de alumno,
+  detalle con foto y código de barras, restaurar y purgar (permisos,
+  validaciones, borrado físico con dependencias y rastro en bitácora).
 
 Convención: `RefreshDatabase` + seed completo en cada test; asserts de negocio
 sobre modelos (`refresh()`), no solo sobre el JSON de respuesta.
@@ -192,9 +240,11 @@ sobre modelos (`refresh()`), no solo sobre el JSON de respuesta.
 
 ## 7. Pendientes
 
-- [ ] Conectar Supabase (PostgreSQL 18) — solo requiere credenciales y cambiar `DB_CONNECTION`.
+- [x] Conectar Supabase — conexión configurada por pooler en `.env` (ver §4.2).
 - [ ] Colección de Bruno (login + CRUD bienes).
 - [ ] Módulo de préstamos (solicitud, aprobación, devolución).
 - [ ] Módulo de auditorías.
 - [ ] Catálogos (CRUD admin: artículos, familias, aulas, etc.).
-- [ ] Limpieza: eliminar/renombrar `app/Models/User.php` (queda sin uso).
+
+> Nota: `app/Models/User.php` fue eliminado en el commit
+> `c07a28b` ("eliminación de user.php"); el auth usa `App\Models\Usuario`.

@@ -2,11 +2,13 @@
 
 namespace App\Services;
 
+use App\Models\Aula;
 use App\Models\Bien;
 use App\Models\BitacoraMovimiento;
 use App\Models\MotivoMovimiento;
 use App\Models\Usuario;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -23,6 +25,9 @@ class BienesService
 
     /** Estados físicos permitidos */
     public const ESTADOS_FISICOS = ['bueno', 'regular', 'deteriorado'];
+
+    /** Vistas del listado de bienes */
+    public const VISTAS = ['general', 'papelera'];
 
     public function __construct(
         private readonly CodigoBarrasService $codigoBarras,
@@ -56,18 +61,68 @@ class BienesService
 
     /**
      * Listado con filtro de propiedad según el rol del actor.
+     *
+     * Filtros:
+     * - vista: 'general' (activos) | 'papelera' (activo = false).
+     * - cve_aula: bienes de una aula concreta (pestaña "por aula").
+     * - cve_edificio: (admin) bienes de todas las aulas de un edificio.
      */
-    public function listar(Usuario $actor, int $perPage = 20): LengthAwarePaginator
+    public function listar(Usuario $actor, int $perPage = 20, array $filtros = []): LengthAwarePaginator
     {
+        $vista = $filtros['vista'] ?? 'general';
+
         $query = Bien::query()
-            ->with(['articulo.familia.tipoBien', 'modelo.marca', 'aula', 'encargado'])
+            ->with('encargado')
             ->orderByDesc('cve_bien');
+
+        $query->where('activo', $vista === 'papelera' ? false : true);
 
         if (! $this->esAdmin($actor)) {
             $query->where('cve_encargado', $actor->cve_persona);
         }
 
+        if (! empty($filtros['cve_aula'])) {
+            $query->where('cve_aula', (int) $filtros['cve_aula']);
+        }
+
+        if ($this->esAdmin($actor) && ! empty($filtros['cve_edificio'])) {
+            $query->whereHas('aula', fn ($q) => $q->where('cve_edificio', (int) $filtros['cve_edificio']));
+        }
+
         return $query->paginate($perPage);
+    }
+
+    /**
+     * Aulas para las pestañas "por aula", con conteo de bienes activos.
+     * - Profesor: solo las aulas donde tiene bienes propios.
+     * - Admin: todas las aulas (opcionalmente de un edificio).
+     */
+    public function aulasDe(Usuario $actor, ?int $cveEdificio = null): Collection
+    {
+        $query = Aula::query()
+            ->join('bienes', 'bienes.cve_aula', '=', 'aula.cve_aula')
+            ->join('edificio', 'edificio.cve_edificio', '=', 'aula.cve_edificio')
+            ->where('bienes.activo', true)
+            ->select([
+                'aula.cve_aula',
+                'aula.nombre',
+                'aula.cve_edificio',
+                'edificio.nombre as edificio',
+                DB::raw('COUNT(bienes.cve_bien) as total_bienes'),
+            ])
+            ->groupBy('aula.cve_aula', 'aula.nombre', 'aula.cve_edificio', 'edificio.nombre')
+            ->orderBy('aula.nombre')
+            ->orderBy('aula.cve_aula');
+
+        if (! $this->esAdmin($actor)) {
+            $query->where('bienes.cve_encargado', $actor->cve_persona);
+        }
+
+        if ($cveEdificio !== null) {
+            $query->where('aula.cve_edificio', $cveEdificio);
+        }
+
+        return $query->get();
     }
 
     /**
@@ -219,6 +274,81 @@ class BienesService
             }
 
             return $bien->fresh();
+        });
+    }
+
+    /**
+     * Restaurar un bien desde la papelera (activo = true).
+     * Registra bitácora con motivo "Restauración".
+     */
+    public function restaurar(Usuario $actor, int $cveBien): Bien
+    {
+        $bien = $this->obtener($actor, $cveBien);
+
+        if ($bien->activo !== false) {
+            abort(422, 'El bien no está en la papelera.');
+        }
+
+        return DB::transaction(function () use ($bien, $actor) {
+            $bien->activo = true;
+            $bien->save();
+
+            $motivo = MotivoMovimiento::query()
+                ->where('nombre_motivo', 'Restauración')
+                ->value('cve_motivo');
+
+            if ($motivo !== null) {
+                BitacoraMovimiento::query()->create([
+                    'cve_bien' => $bien->getKey(),
+                    'cve_motivo' => $motivo,
+                    'cve_persona_accion' => $actor->cve_persona,
+                    'fecha_movimiento' => now(),
+                    'observaciones' => 'Bien restaurado desde la papelera por '.($actor->nombre ?? $actor->usuario),
+                ]);
+            }
+
+            return $bien->fresh(['articulo.familia.tipoBien', 'modelo.marca', 'aula', 'encargado']);
+        });
+    }
+
+    /**
+     * Eliminar definitivamente un bien que está en la papelera.
+     * - Solo bienes de la papelera (activo = false) y disponibles.
+     * - Borra sus dependencias (auditoría detalle, préstamos, bitácora del bien).
+     * - Deja un registro de rastro en bitácora con cve_bien null (porque el bien
+     *   ya no existirá) motivo "Baja Definitiva".
+     */
+    public function purgar(Usuario $actor, int $cveBien): void
+    {
+        $bien = $this->obtener($actor, $cveBien);
+
+        if ($bien->activo !== false) {
+            abort(422, 'Solo se pueden eliminar definitivamente los bienes de la papelera.');
+        }
+
+        if ($bien->estado_prestamo !== 'disponible') {
+            abort(422, 'El bien tiene un préstamo activo y no puede eliminarse definitivamente.');
+        }
+
+        DB::transaction(function () use ($bien, $actor) {
+            $motivo = MotivoMovimiento::query()
+                ->where('nombre_motivo', 'Baja Definitiva')
+                ->value('cve_motivo');
+
+            BitacoraMovimiento::query()->create([
+                'cve_bien' => null,
+                'cve_motivo' => $motivo,
+                'cve_persona_accion' => $actor->cve_persona,
+                'fecha_movimiento' => now(),
+                'observaciones' => 'Bien eliminado definitivamente: '.$bien->nombre
+                    .' (código '.$bien->codigo_barras.', identificador '.$bien->no_serie.')'
+                    .' por '.($actor->nombre ?? $actor->usuario),
+            ]);
+
+            $bien->auditoriasDetalle()->delete();
+            $bien->prestamos()->delete();
+            $bien->movimientos()->delete();
+            $bien->delete();
         });
     }
 

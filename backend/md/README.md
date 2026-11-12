@@ -2,6 +2,7 @@
 
 > Documento generado el 2026-11-11. Describe de forma técnica todo lo implementado
 > en la fase de migraciones, modelos, observers y seeders del backend Laravel 12.
+> Última sesión documentada: §15 (conexión Supabase + expiración de tokens, 2026-11-12).
 
 ## 1. Contexto
 
@@ -179,11 +180,130 @@ Implementada después del CRUD (antes se usaba el header temporal `X-Usuario`):
   y `BienesCrudTest` migrado de `X-Usuario` a `actingAs(..., 'sanctum')`.
 - Suite completa: 25 tests / 83 aserciones.
 
+## 13. Vistas del listado de bienes (2026-11-12)
+
+Función "ver bienes" para la PWA: tres vistas para profesor (general, por aula,
+papelera) y para admin (todo el edificio separado por aula, papelera global),
+con dos niveles de información.
+
+### Endpoints nuevos/modificados
+
+- `GET /api/bienes` ahora es **listado resumido** (`BienResumenResource`):
+  solo `cve_bien`, `identificador`, `nombre`, `encargado` y `estado_fisico`.
+  Parámetros: `vista` (`general` default | `papelera`), `cve_aula`,
+  `cve_edificio` (solo aplica a admin), `per_page` (validado inline, 1–100).
+- `GET /api/aulas` (nuevo, `AulaController`): pestañas "por aula" con conteo
+  de bienes activos (`total_bienes`). Profesor: solo aulas con bienes propios
+  (join con `bienes` filtrado por `cve_encargado`). Admin: todas las aulas,
+  opcionalmente `?cve_edificio=X`. Alumno: 403. Ruta en `routes/api.php`
+  dentro de `auth:sanctum`.
+- `GET /api/bienes/{id}` (detalle) ahora expone `foto_url` y `foto_drive_id`
+  en `BienResource` (el `codigo_barras` ya estaba).
+
+### Implementación
+
+- `BienesService::listar($actor, $perPage, $filtros)`: `activo=true/false`
+  según vista, scope de propiedad para no-admin, `cve_aula` directo y
+  `cve_edificio` vía `whereHas('aula')`.
+- `BienesService::aulasDe($actor, $cveEdificio)`: join `aula + bienes +
+  edificio` con `groupBy` y `COUNT`; solo aulas con bienes activos.
+- `BienesService::VISTAS` constante para la validación de `vista`.
+- Decisión acordada: la papelera es **solo de lectura** (restaurar/purgar se
+  agregará después si se requiere).
+
+### Tests (`tests/Feature/BienesVistasTest.php`, 10 tests)
+
+Resumen de campos exactos del listado, vista inválida → 422, papelera de admin
+y de profesor (solo bienes propios), filtro por aula, filtro por edificio del
+admin, `/api/aulas` para profesor (conteos = total de sus bienes) y admin
+(filtro por edificio), bloqueo de alumno (403) y detalle con foto + código de
+barras. Nota: para papelerizar en tests elegir bienes con
+`estado_prestamo = 'disponible'` (un bien prestado se rechaza con 422).
+
+Suite completa: 35 tests / 189 aserciones.
+
+## 14. Acciones de la papelera: restaurar y purgar (2026-11-12)
+
+Complemento de §13: la papelera deja de ser de solo lectura y gana las dos
+acciones pendientes (botones del frontend).
+
+### Endpoints
+
+- `PUT /api/bienes/{id}/restaurar` — reactiva un bien de la papelera
+  (`activo = true`) y registra bitácora con motivo **"Restauración"**.
+  Errores: 403 (bien ajeno), 422 (no está en la papelera).
+- `DELETE /api/bienes/{id}/purgar` — borrado **físico** del bien. Reglas:
+  solo bienes de la papelera y `disponible`. En transacción: crea rastro en
+  bitácora (motivo "Baja Definitiva", `cve_bien = null`, observaciones con
+  nombre + código de barras + identificador), borra `auditoria_detalle`,
+  `prestamos` y `bitacora_movimientos` del bien, y finalmente el bien.
+  Errores: 403 (bien ajeno), 422 (bien activo o préstamo activo).
+
+### Implementación
+
+- `BienesService::restaurar()` y `BienesService::purgar()`.
+- `BienController::restaurar()` / `BienController::purgar()`.
+- Rutas nuevas en `routes/api.php` (junto al `apiResource`).
+- `CatalogosSeeder` agrega al catálogo el motivo **"Restauración"**
+  (`requiere_aprobacion = false`); no existe en el dump original.
+- El borrado físico es viable porque las FKs de `bienes` solo apuntan hacia
+  afuera (no hay tablas hijas que impidan `delete` más allá de las tres
+  dependencias borradas en cascada manual).
+
+### Notas técnicas
+
+- Reparado de nuevo el BOM/mojibake al editar con PowerShell 5.1 (ver §9.1):
+  `Set-Content` decodificó ANSI un archivo UTF-8 sin BOM y corrompió acentos
+  en `tests/Feature/BienesVistasTest.php`; se recuperó re-encodeando
+  (UTF-8 → bytes → 1252 → bytes → UTF-8).
+
+### Tests (+9 en `BienesVistasTest.php`)
+
+Restaurar: admin (200 + bitácora "Restauración"), profesor (su bien), bien
+fuera de papelera (422), bien ajeno (403), alumno (403). Purgar: admin (bien +
+dependencias eliminados, rastro en bitácora), profesor (su bien), bien activo
+(422), bien ajeno (403), alumno (403).
+
+Suite completa: 44 tests / 222 aserciones.
+
+## 15. Conexión a Supabase y expiración de tokens (2026-11-12, branch `feature-conexionbasededatos`)
+
+### 15.1 Conexión (configuración de código)
+
+- `.env`: `DB_CONNECTION=pgsql`, host del pooler de Supabase
+  (`aws-1-<region>.pooler.supabase.com`), usuario `postgres.<ref-del-proyecto>`,
+  puerto 5432, BD `postgres` y `DB_SSLMODE=require`. Claves `SUPABASE_URL`,
+  `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY` y `SUPABASE_JWKS_URL`
+  documentadas en `.env.example` (el `.env` real no se versiona).
+- Drivers ligeros (la API no usa tablas de infraestructura):
+  `SESSION_DRIVER=file`, `CACHE_STORE=file`, `QUEUE_CONNECTION=sync`.
+- Verificado con Eloquent: lectura de `bienes` con relaciones cargadas
+  (`aula.edificio`, `articulo.familia.tipoBien`, `modelo.marca`, `encargado`)
+  y emisión/revocación de tokens Sanctum.
+- Nota del branch: `feature-conexionbasededatos` se había creado desde
+  `c07a28b` (antes de la última sesión); se integró `feature-verInventario`
+  con fast-forward para recuperar vistas + papelera + tests.
+
+### 15.2 Expiración de tokens
+
+- `config/sanctum.php` publicado (Laravel 12 no lo incluye por defecto):
+  `'expiration' => env('SANCTUM_TOKEN_EXPIRATION', 480)` → tokens válidos
+  **8 horas** (ventana de un turno docente), configurable desde `.env`.
+- Sanctum v4 valida que `created_at` del token esté dentro de la ventana y
+  que `expires_at` (si existiera) no haya pasado (`Guard.php:128`).
+- Los tokens se guardan hasheados (SHA-256) en `personal_access_tokens`;
+  el token plano solo se devuelve una vez al crear la sesión.
+- Test nuevo en `AuthTest`: atrasa `created_at` 481 minutos y espera 401.
+
+Suite completa: **45 tests / 223 aserciones**.
+
 ## 10. Pendientes
 
 - [x] CRUD de bienes con pautas de negocio (ver §11).
 - [x] Autenticación con Sanctum: login/logout/me + rutas protegidas (ver §12).
-- [ ] Conexión a Supabase (PostgreSQL 18) — requiere credenciales del proyecto.
+- [x] Vistas del listado de bienes: general / por aula / papelera + `/api/aulas` (ver §13).
+- [x] Acciones de la papelera: restaurar y borrar definitivamente (ver §14).
+- [x] Conexión a Supabase — configurada por pooler en `.env` (ver §15.1).
 - [ ] Colección de Bruno para pruebas de endpoints.
 - [ ] Eliminar/adaptar `User.php` por defecto según decisión de auth.
 
