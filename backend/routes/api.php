@@ -22,6 +22,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('bienes/{bien}/purgar', [BienController::class, 'purgar']);
 
     Route::get('prestamos', [PrestamoController::class, 'index']);
+    Route::get('prestamos/{prestamo}', [PrestamoController::class, 'show'])
+        ->whereNumber('prestamo');
     Route::post('prestamos', [PrestamoController::class, 'store']);
     Route::post('prestamos/{prestamo}/aceptar', [PrestamoController::class, 'aceptar'])
         ->whereNumber('prestamo');

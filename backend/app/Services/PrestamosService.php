@@ -22,21 +22,28 @@ use Illuminate\Support\Facades\DB;
  */
 class PrestamosService
 {
-    /** Vista: préstamos solicitados por el actor. */
+    /** Vista: préstamos solicitados por el actor (historial propio). */
     public const VISTA_SOLICITADOS = 'solicitados';
 
-    /** Vista: préstamos sobre bienes donde el actor es encargado. */
+    /** Vista: préstamos sobre bienes donde el actor es encargado (buzón de acciones). */
     public const VISTA_RECIBIDOS = 'recibidos';
 
-    public const VISTAS = [self::VISTA_SOLICITADOS, self::VISTA_RECIBIDOS];
+    /** Vista: todo el historial de préstamos (solo administrador). */
+    public const VISTA_GENERAL = 'general';
+
+    public const VISTAS = [self::VISTA_SOLICITADOS, self::VISTA_RECIBIDOS, self::VISTA_GENERAL];
 
     /** Estados de préstamo que mantienen el bien ocupado. */
     public const ESTADOS_ACTIVOS = ['pendiente', 'aprobado', 'por_devolver'];
 
     /**
-     * Listado paginado según la vista.
-     * - solicitados: préstamos pedidos por el actor (admin: todos).
-     * - recibidos: préstamos de bienes donde el actor es encargado (admin: todos).
+     * Listado paginado según la vista (historial).
+     * - solicitados: préstamos pedidos por el actor, sin importar el rol
+     *   (cada persona ve su propio historial).
+     * - recibidos: préstamos de bienes donde el actor es encargado
+     *   (buzón para aceptar/confirmar; el admin lo usa como bandeja de
+     *   acciones sobre todos los bienes).
+     * - general: todo el historial de préstamos, solo administrador.
      */
     public function listar(Usuario $actor, string $vista, int $perPage = 20): LengthAwarePaginator
     {
@@ -44,17 +51,44 @@ class PrestamosService
             ->with(['bien.encargado', 'personaSolicita'])
             ->orderByDesc('cve_prestamo');
 
-        if ($this->esAdmin($actor)) {
+        if ($vista === self::VISTA_GENERAL) {
+            if (! $this->esAdmin($actor)) {
+                abort(403, 'Solo el administrador puede ver el historial general.');
+            }
+
             return $query->paginate($perPage);
         }
 
         if ($vista === self::VISTA_SOLICITADOS) {
             $query->where('cve_persona_solicita', $actor->cve_persona);
-        } else {
+
+            return $query->paginate($perPage);
+        }
+
+        if (! $this->esAdmin($actor)) {
             $query->whereHas('bien', fn ($q) => $q->where('cve_encargado', $actor->cve_persona));
         }
 
         return $query->paginate($perPage);
+    }
+
+    /**
+     * Detalle de un préstamo. Acceso: solicitante, encargado del bien o admin.
+     */
+    public function obtener(Usuario $actor, int $cvePrestamo): Prestamo
+    {
+        $prestamo = Prestamo::query()
+            ->with(['bien.encargado', 'personaSolicita'])
+            ->findOrFail($cvePrestamo);
+
+        $esSolicitante = $prestamo->cve_persona_solicita === $actor->cve_persona;
+        $esEncargado = $prestamo->bien->cve_encargado === $actor->cve_persona;
+
+        if (! $this->esAdmin($actor) && ! $esSolicitante && ! $esEncargado) {
+            abort(403, 'No tienes acceso a este préstamo.');
+        }
+
+        return $prestamo;
     }
 
     /**

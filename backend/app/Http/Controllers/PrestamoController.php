@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StorePrestamoRequest;
 use App\Http\Resources\PrestamoResource;
+use App\Http\Resources\PrestamoResumenResource;
 use App\Models\Usuario;
 use App\Services\PrestamosService;
 use Illuminate\Http\JsonResponse;
@@ -33,7 +34,20 @@ class PrestamoController extends Controller
 
         $perPage = max(1, min(100, (int) $request->query('per_page', 20)));
 
-        return PrestamoResource::collection($this->prestamos->listar($actor, $vista, $perPage));
+        return PrestamoResumenResource::collection($this->prestamos->listar($actor, $vista, $perPage));
+    }
+
+    /**
+     * Detalle completo del préstamo (segundo nivel de información).
+     * Acceso: solicitante, encargado del bien o admin.
+     */
+    public function show(Request $request, int $prestamo): JsonResponse
+    {
+        $actor = $this->actor($request);
+
+        return response()->json([
+            'data' => new PrestamoResource($this->prestamos->obtener($actor, $prestamo)),
+        ]);
     }
 
     public function store(StorePrestamoRequest $request): JsonResponse

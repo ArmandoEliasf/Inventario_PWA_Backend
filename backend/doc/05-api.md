@@ -47,7 +47,8 @@ Authorization: Bearer <token>
 | DELETE | `/api/bienes/{cve_bien}` | Profesor (propio) | Enviar a papelera |
 | PUT | `/api/bienes/{cve_bien}/restaurar` | Profesor (propio) | Restaurar bien de la papelera (`activo=true` + bitácora "Restauración") |
 | DELETE | `/api/bienes/{cve_bien}/purgar` | Profesor (propio) | Eliminar definitivamente (borra el bien y sus dependencias) |
-| GET | `/api/prestamos?vista=solicitados\|recibidos&per_page=20` | Cualquier rol | Préstamos solicitados por el actor / sobre sus bienes (admin: todos) |
+| GET | `/api/prestamos?vista=solicitados\|recibidos\|general&per_page=20` | Cualquier rol | Historial **resumido**. `solicitados`: propios (cada rol ve el suyo); `recibidos`: sobre mis bienes (admin: todos); `general`: todo el historial (solo admin) |
+| GET | `/api/prestamos/{id}` | Solicitante / encargado del bien / admin | **Detalle completo** del préstamo |
 | POST | `/api/prestamos` | Cualquier rol | Solicitar préstamo. Admin: auto-aprobado |
 | POST | `/api/prestamos/{id}/aceptar` | Encargado del bien / admin | `pendiente → aprobado` |
 | POST | `/api/prestamos/{id}/devolver` | Solicitante | `aprobado → por_devolver` (admin: directo `devuelto`) |
@@ -77,10 +78,24 @@ Reglas de la solicitud (`POST /api/prestamos` con `cve_bien`,
   `prestado`, `devuelto` → `disponible`); un préstamo creado directamente
   como `aprobado` marca el bien en `PrestamosService::solicitar()`.
 
-Respuesta del listado (`PrestamoResource`): `cve_prestamo`,
-`estado_prestamo`, `fecha_solicitud`, `fecha_devolucion_pactada`,
-`fecha_devolucion_real`, `observaciones`, `bien` (resumen: identificador,
-nombre, estado físico, encargado) y `solicitante`.
+Respuesta del listado (`PrestamoResumenResource`): `cve_prestamo`,
+`estado_prestamo`, `bien` (identificador, nombre y encargado) y
+`solicitante` — el mismo patrón de dos niveles que los bienes.
+
+**Detalle completo** (`GET /api/prestamos/{id}`, recurso `PrestamoResource`):
+toda la información — `fecha_solicitud`, `fecha_devolucion_pactada`,
+`fecha_devolucion_real`, `observaciones`, bien (identificador, nombre,
+estado físico, encargado) y solicitante.
+
+Historiales (`GET /api/prestamos`):
+
+- **Cada rol ve su historial propio** (`vista=solicitados`): solo los
+  préstamos que él pidió, sin mezclarse (alumno/profesor/admin).
+- **El admin tiene dos historiales**: el propio (`solicitados`) y el
+  **general** (`vista=general`, todos los préstamos registrados).
+- `vista=recibidos` es el buzón de acciones (aceptar/confirmar): préstamos
+  sobre bienes donde el actor es encargado; el admin la usa como bandeja
+  de todos.
 
 ## Listado vs detalle (dos niveles de información)
 

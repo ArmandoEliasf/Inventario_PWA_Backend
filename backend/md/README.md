@@ -2,7 +2,7 @@
 
 > Documento generado el 2026-11-11. Describe de forma técnica todo lo implementado
 > en la fase de migraciones, modelos, observers y seeders del backend Laravel 12.
-> Última sesión documentada: §16 (módulo de préstamos, 2026-11-12).
+> Última sesión documentada: §16.1 (módulo de préstamos + historial, 2026-11-12).
 
 ## 1. Contexto
 
@@ -344,6 +344,24 @@ validación de campos), permisos (403 para no encargado/solicitante) y
 listados `solicitados`/`recibidos` con visibilidad por rol.
 
 Suite completa: **66 tests / 280 aserciones**.
+
+### 16.1 Historial de préstamos (agregado posterior, misma sesión)
+
+- Cada rol ve **su historial propio** (`vista=solicitados`, ahora
+  estrictamente propios también para admin — antes devolvía todos).
+- Nueva vista **`general`** (solo admin): todo el historial de préstamos.
+  Profesor/alumno → 403.
+- `vista=recibidos` se mantiene como buzón de acciones (aceptar/confirmar);
+  para admin sigue mostrando todos.
+- Listado resumido con `PrestamoResumenResource` (nuevo): `cve_prestamo`,
+  `estado_prestamo`, `bien` (identificador, nombre, encargado) y
+  `solicitante` — mismo patrón de dos niveles que los bienes.
+- Detalle completo: `GET /api/prestamos/{id}` (nuevo, `PrestamoController::show`
+  + `PrestamosService::obtener()`): fechas, observaciones, bien y solicitante.
+  Acceso: solicitante, encargado del bien o admin; ajenos → 403.
+- Tests: `tests/Feature/PrestamosHistorialTest.php` (8 tests).
+
+Suite completa: **74 tests / 311 aserciones**.
 
 ## 10. Pendientes
 

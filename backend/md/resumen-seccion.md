@@ -237,11 +237,25 @@ Archivos: `PrestamosService` (reglas + transacciones + bitácora),
 `PrestamoController`, `StorePrestamoRequest`, `PrestamoResource` (bien
 resumen + solicitante), rutas `/api/prestamos*`.
 
+### 5bis.1 Historial de préstamos (dos niveles de información)
+
+- Cada rol ve **su historial propio** (`vista=solicitados`): solo los
+  préstamos que él pidió, sin mezclarse entre roles.
+- El admin tiene **dos historiales**: el propio (`solicitados`) y el
+  **general** (`vista=general`, todos los préstamos; profesor/alumno → 403).
+- `vista=recibidos` es el buzón de acciones (aceptar/confirmar), no historial.
+- Listado resumido (`PrestamoResumenResource`): `cve_prestamo`,
+  `estado_prestamo`, `bien` (identificador, nombre, encargado) y
+  `solicitante`. Detalle completo (`GET /api/prestamos/{id}`,
+  `PrestamoResource`): fechas, observaciones, bien y solicitante.
+- Acceso al detalle: solicitante, encargado del bien o admin (403 para
+  ajenos).
+
 ---
 
 ## 6. Testing
 
-`php artisan test` → **66 tests, 280 aserciones**.
+`php artisan test` → **74 tests, 311 aserciones**.
 
 - `tests/Feature/AuthTest.php` (7): login correcto (token+rol), contraseña
   incorrecta, usuario inexistente, usuario inactivo, consumo de endpoint con
@@ -263,6 +277,9 @@ resumen + solicitante), rutas `/api/prestamos*`.
   del admin, bloqueos (bien prestado/en papelera/propio/duplicado, estados
   inválidos), permisos (403) y listados `solicitados`/`recibidos` con
   visibilidad por rol.
+- `tests/Feature/PrestamosHistorialTest.php` (8): listado resumido (campos
+  exactos), historiales separados por rol, vista `general` solo admin,
+  detalle completo con acceso solicitante/encargado/admin y 403 para ajenos.
 
 Convención: `RefreshDatabase` + seed completo en cada test; asserts de negocio
 sobre modelos (`refresh()`), no solo sobre el JSON de respuesta.
