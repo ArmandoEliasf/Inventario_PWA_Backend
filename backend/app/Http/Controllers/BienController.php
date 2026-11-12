@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StoreBienRequest;
 use App\Http\Requests\UpdateBienRequest;
 use App\Http\Resources\BienResource;
+use App\Http\Resources\BienResumenResource;
 use App\Models\Usuario;
 use App\Services\BienesService;
 use Illuminate\Http\JsonResponse;
@@ -33,9 +34,18 @@ class BienController extends Controller
             abort(403, 'El alumno no puede consultar el inventario.');
         }
 
-        $perPage = max(1, min(100, (int) $request->query('per_page', 20)));
+        $datos = $request->validate([
+            'vista' => ['nullable', 'in:'.implode(',', BienesService::VISTAS)],
+            'cve_aula' => ['nullable', 'integer', 'exists:aula,cve_aula'],
+            'cve_edificio' => ['nullable', 'integer', 'exists:edificio,cve_edificio'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+        ]);
 
-        return BienResource::collection($this->bienes->listar($actor, $perPage));
+        $perPage = (int) ($datos['per_page'] ?? 20);
+
+        return BienResumenResource::collection(
+            $this->bienes->listar($actor, $perPage, $datos),
+        );
     }
 
     public function show(Request $request, int $bien): JsonResponse

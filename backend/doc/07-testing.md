@@ -23,6 +23,14 @@ Configuración: `phpunit.xml` usa BD separada de desarrollo (por defecto
 | `$this->profesor` | 3 | Profesor (persona 3) |
 | `$this->alumno` | 4 | Estudiante |
 
+## Suite: `tests/Feature/BienesVistasTest.php`
+
+10 tests sobre las vistas del listado: resumen de campos del listado,
+vista papelera (admin y profesor solo suya), filtro por aula, filtro por
+edificio (admin), endpoint `/api/aulas` (aulas del profesor con conteos,
+filtro por edificio para admin), bloqueo de alumno y detalle con foto +
+código de barras.
+
 ## Qué cubre
 
 ### Creación
@@ -59,7 +67,6 @@ Configuración: `phpunit.xml` usa BD separada de desarrollo (por defecto
 
 Convenciones:
 1. `use RefreshDatabase;` + `$this->seed()` en `setUp()`.
-2. Peticiones por `getJson/postJson/putJson/deleteJson` con header
-   `['X-Usuario' => $this->admin]`.
+2. Peticiones por `getJson/postJson/putJson/deleteJson` con `actingAs(..., 'sanctum')`.
 3. Asserts de negocio sobre el modelo fresco (`$bien->refresh()`), no solo sobre
    la respuesta JSON.

@@ -151,13 +151,31 @@ php artisan migrate:fresh --seed   # reconstruir todo
 | POST | `/api/login` | Login → token |
 | GET | `/api/me` | Perfil autenticado |
 | POST | `/api/logout` | Cerrar sesión |
-| GET | `/api/bienes?per_page=20&page=1` | Listado paginado (filtrado por rol) |
-| GET | `/api/bienes/{id}` | Detalle + `qr_url` |
+| GET | `/api/aulas?cve_edificio=X` | Pestañas "por aula" con conteo (profesor: sus aulas; admin: todas) |
+| GET | `/api/bienes?vista=general\|papelera&cve_aula=X&cve_edificio=X` | Listado resumido paginado (filtrado por rol) |
+| GET | `/api/bienes/{id}` | Detalle completo + `qr_url` + foto + código de barras |
 | POST | `/api/bienes` | Crear |
 | PUT/PATCH | `/api/bienes/{id}` | Editar |
 | DELETE | `/api/bienes/{id}` | Papelera |
 
-### 5.4 Arquitectura del módulo
+### 5.4 Vistas del listado de bienes
+
+Tres vistas para profesor, dos para admin, resueltas con parámetros del mismo
+endpoint (no hay rutas aparte):
+
+| Vista | Parámetro | Profesor | Administrador |
+|---|---|---|---|
+| General | `vista=general` (default) | sus bienes activos | todos los bienes activos |
+| Por aula | `+ cve_aula=X` | sus bienes de esa aula (pestañas desde `GET /api/aulas`) | bienes de esa aula |
+| Por edificio | `+ cve_edificio=X` | — | bienes de todas las aulas del edificio |
+| Papelera | `vista=papelera` | su papelera | toda la papelera |
+
+Dos niveles de información: el listado (`BienResumenResource`) entrega solo
+`cve_bien`, `identificador`, `nombre`, `encargado` y `estado_fisico`; el detalle
+(`BienResource`) entrega todo, incluidos `foto_url`, `foto_drive_id` y
+`codigo_barras`, más `qr_url` calculada.
+
+### 5.5 Arquitectura del módulo
 
 ```
 routes/api.php
@@ -175,7 +193,7 @@ Configuración: `FRONTEND_URL` en `.env` y `config/services.php`.
 
 ## 6. Testing
 
-`php artisan test` → **25 tests, 83 aserciones**.
+`php artisan test` → **35 tests, 189 aserciones**.
 
 - `tests/Feature/AuthTest.php` (6): login correcto (token+rol), contraseña
   incorrecta, usuario inexistente, usuario inactivo, consumo de endpoint con
@@ -184,6 +202,11 @@ Configuración: `FRONTEND_URL` en `.env` y `config/services.php`.
   automático, identificador (7 dígitos, ceros, unicidad global), bloqueos de
   alumno, visibilidad por propiedad, edición con re-generación de prefijo,
   papelera con bitácora, bienes prestados, acceso ajeno (403), sin token (401).
+- `tests/Feature/BienesVistasTest.php` (10): listado resumido (campos exactos),
+  vista papelera (admin/profesor, solo bienes inactivos y solo propios),
+  filtro por aula, filtro por edificio (admin), endpoint `/api/aulas`
+  (aulas del profesor con conteos, filtro por edificio), bloqueo de alumno,
+  detalle con foto y código de barras.
 
 Convención: `RefreshDatabase` + seed completo en cada test; asserts de negocio
 sobre modelos (`refresh()`), no solo sobre el JSON de respuesta.

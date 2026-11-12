@@ -39,11 +39,51 @@ Authorization: Bearer <token>
 | POST | `/api/login` | — | Login, devuelve token |
 | GET | `/api/me` | Cualquier token | Perfil autenticado |
 | POST | `/api/logout` | Cualquier token | Cerrar sesión |
-| GET | `/api/bienes?per_page=20&page=1` | Profesor | Listado paginado. Admin: todos; profesor: solo suyos; alumno: 403 |
-| GET | `/api/bienes/{cve_bien}` | Profesor | Detalle + `qr_url` para pintar el QR |
+| GET | `/api/aulas?cve_edificio=X` | Profesor | Pestañas "por aula" con conteo de bienes activos. Profesor: solo sus aulas; admin: todas (filtro por edificio opcional); alumno: 403 |
+| GET | `/api/bienes?vista=general\|papelera&cve_aula=X&cve_edificio=X&per_page=20` | Profesor | Listado **resumido**. Profesor: solo suyos; admin: todos (filtros por aula/edificio); alumno: 403 |
+| GET | `/api/bienes/{cve_bien}` | Profesor | **Detalle completo** + `qr_url` para pintar el QR |
 | POST | `/api/bienes` | Profesor | Crear bien (QR y código de barras automáticos) |
 | PUT/PATCH | `/api/bienes/{cve_bien}` | Profesor (propio) | Editar bien |
 | DELETE | `/api/bienes/{cve_bien}` | Profesor (propio) | Enviar a papelera |
+
+## Listado vs detalle (dos niveles de información)
+
+**Listado resumido** (`GET /api/bienes`, recurso `BienResumenResource`): solo los
+campos para la tarjeta de lista — `cve_bien`, `identificador`, `nombre`,
+`encargado` y `estado_fisico`. El botón "ver detalles" lleva al endpoint show.
+
+**Detalle completo** (`GET /api/bienes/{id}`, recurso `BienResource`): toda la
+información — código de barras, QR, `identificador`, `no_factura`, `descripcion`,
+**`foto_url`/`foto_drive_id`**, costo, catálogos (artículo/familia/tipo, modelo,
+aula, encargado) y `qr_url` calculada.
+
+## Parámetros del listado (GET /api/bienes)
+
+| Parámetro | Valores | Uso |
+|---|---|---|
+| `vista` | `general` (default), `papelera` | `general`: bienes activos; `papelera`: `activo=false` |
+| `cve_aula` | id de aula | Pestaña "por aula" |
+| `cve_edificio` | id de edificio | (admin) todas las aulas de un edificio |
+| `per_page` | 1–100 | Paginación (default 20) |
+
+Profesor siempre está limitado a `cve_encargado = su persona` en todas las vistas.
+
+## GET /api/aulas
+
+Pestañas "bienes por aula". Solo devuelve aulas con bienes activos y su conteo.
+
+```json
+{
+  "data": [
+    { "cve_aula": 7, "nombre": "A-101", "cve_edificio": 3, "edificio": "DSM", "total_bienes": 17 },
+    { "cve_aula": 8, "nombre": "A-102", "cve_edificio": 3, "edificio": "DSM", "total_bienes": 16 }
+  ]
+}
+```
+
+- Profesor: solo las aulas donde tiene bienes propios.
+- Admin: todas las aulas; con `?cve_edificio=X` se limita a un edificio.
+- Alumno: 403.
 
 ## POST /api/bienes
 

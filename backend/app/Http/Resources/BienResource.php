@@ -17,6 +17,8 @@ class BienResource extends JsonResource
             'identificador' => $this->no_serie,
             'no_factura' => $this->no_factura,
             'descripcion' => $this->descripcion,
+            'foto_url' => $this->foto_url,
+            'foto_drive_id' => $this->foto_drive_id,
             'costo_unitario' => $this->costo_unitario,
             'estado_fisico' => $this->estado_fisico,
             'estado_prestamo' => $this->estado_prestamo,

@@ -179,10 +179,53 @@ Implementada después del CRUD (antes se usaba el header temporal `X-Usuario`):
   y `BienesCrudTest` migrado de `X-Usuario` a `actingAs(..., 'sanctum')`.
 - Suite completa: 25 tests / 83 aserciones.
 
+## 13. Vistas del listado de bienes (2026-11-12)
+
+Función "ver bienes" para la PWA: tres vistas para profesor (general, por aula,
+papelera) y para admin (todo el edificio separado por aula, papelera global),
+con dos niveles de información.
+
+### Endpoints nuevos/modificados
+
+- `GET /api/bienes` ahora es **listado resumido** (`BienResumenResource`):
+  solo `cve_bien`, `identificador`, `nombre`, `encargado` y `estado_fisico`.
+  Parámetros: `vista` (`general` default | `papelera`), `cve_aula`,
+  `cve_edificio` (solo aplica a admin), `per_page` (validado inline, 1–100).
+- `GET /api/aulas` (nuevo, `AulaController`): pestañas "por aula" con conteo
+  de bienes activos (`total_bienes`). Profesor: solo aulas con bienes propios
+  (join con `bienes` filtrado por `cve_encargado`). Admin: todas las aulas,
+  opcionalmente `?cve_edificio=X`. Alumno: 403. Ruta en `routes/api.php`
+  dentro de `auth:sanctum`.
+- `GET /api/bienes/{id}` (detalle) ahora expone `foto_url` y `foto_drive_id`
+  en `BienResource` (el `codigo_barras` ya estaba).
+
+### Implementación
+
+- `BienesService::listar($actor, $perPage, $filtros)`: `activo=true/false`
+  según vista, scope de propiedad para no-admin, `cve_aula` directo y
+  `cve_edificio` vía `whereHas('aula')`.
+- `BienesService::aulasDe($actor, $cveEdificio)`: join `aula + bienes +
+  edificio` con `groupBy` y `COUNT`; solo aulas con bienes activos.
+- `BienesService::VISTAS` constante para la validación de `vista`.
+- Decisión acordada: la papelera es **solo de lectura** (restaurar/purgar se
+  agregará después si se requiere).
+
+### Tests (`tests/Feature/BienesVistasTest.php`, 10 tests)
+
+Resumen de campos exactos del listado, vista inválida → 422, papelera de admin
+y de profesor (solo bienes propios), filtro por aula, filtro por edificio del
+admin, `/api/aulas` para profesor (conteos = total de sus bienes) y admin
+(filtro por edificio), bloqueo de alumno (403) y detalle con foto + código de
+barras. Nota: para papelerizar en tests elegir bienes con
+`estado_prestamo = 'disponible'` (un bien prestado se rechaza con 422).
+
+Suite completa: 35 tests / 189 aserciones.
+
 ## 10. Pendientes
 
 - [x] CRUD de bienes con pautas de negocio (ver §11).
 - [x] Autenticación con Sanctum: login/logout/me + rutas protegidas (ver §12).
+- [x] Vistas del listado de bienes: general / por aula / papelera + `/api/aulas` (ver §13).
 - [ ] Conexión a Supabase (PostgreSQL 18) — requiere credenciales del proyecto.
 - [ ] Colección de Bruno para pruebas de endpoints.
 - [ ] Eliminar/adaptar `User.php` por defecto según decisión de auth.
