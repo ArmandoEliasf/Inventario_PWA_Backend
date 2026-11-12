@@ -25,6 +25,7 @@ class AulaController extends Controller
             abort(403, 'El alumno no puede consultar el inventario.');
         }
 
+        $cveEdificio = $request->query('cve_edificio');
         $aulas = $this->bienes->aulasDe($actor, $cveEdificio !== null ? (int) $cveEdificio : null);
 
         return response()->json(['data' => $aulas]);
