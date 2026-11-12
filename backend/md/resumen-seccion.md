@@ -13,7 +13,7 @@
 | Proyecto | Módulo de inventario para una PWA (solo backend) |
 | Framework | Laravel 12, PHP 8.2+ |
 | BD desarrollo | SQLite (`database/database.sqlite`) |
-| BD producción | PostgreSQL 18 vía Supabase (pendiente conectar) |
+| BD producción | PostgreSQL vía Supabase (conectado por pooler, ver §4.1) |
 | Origen del esquema | `database/bd-datos reales.sql` (dump PostgreSQL con datos reales UTC) |
 | Testing | PHPUnit (25 tests / 83 aserciones, todos en verde) |
 | Cliente de pruebas | Bruno (colección pendiente) |
@@ -113,6 +113,27 @@ php artisan migrate:fresh --seed   # reconstruir todo
 - Rutas protegidas con `auth:sanctum`; la PWA envía
   `Authorization: Bearer <token>` en cada petición.
 
+### 4.1 Expiración de tokens
+
+- `config/sanctum.php` publicado (Laravel 12 no lo genera por defecto).
+- `expiration` = `env('SANCTUM_TOKEN_EXPIRATION', 480)` → los tokens viven
+  **8 horas**; configurable desde `.env`.
+- Sanctum valida que `created_at` esté dentro de la ventana; tokens con
+  `expires_at` propio también se respetan si se definieran.
+- Test: `test_token_expira_pasada_la_ventana_configurada` atrasa `created_at`
+  481 minutos y verifica 401.
+
+### 4.2 Variables de entorno
+
+| Variable | Uso |
+|---|---|
+| `DB_CONNECTION/DB_HOST/...` | Conexión a Supabase por pooler (`pgsql`, host `aws-1-<region>.pooler.supabase.com`, usuario `postgres.<ref>`, `DB_SSLMODE=require`) |
+| `SANCTUM_TOKEN_EXPIRATION` | Ventana de validez del token en minutos |
+| `SUPABASE_URL` | Base URL de la Data API del proyecto |
+| `SUPABASE_PUBLISHABLE_KEY` | Clave pública (solo cliente, limitada por RLS del proyecto) |
+| `SUPABASE_SECRET_KEY` | Clave server-side; nunca exponer al frontend |
+| `SUPABASE_JWKS_URL` | JWKS de Auth (uso futuro) |
+
 ---
 
 ## 5. CRUD de bienes
@@ -195,11 +216,12 @@ Configuración: `FRONTEND_URL` en `.env` y `config/services.php`.
 
 ## 6. Testing
 
-`php artisan test` → **44 tests, 222 aserciones**.
+`php artisan test` → **45 tests, 223 aserciones**.
 
-- `tests/Feature/AuthTest.php` (6): login correcto (token+rol), contraseña
+- `tests/Feature/AuthTest.php` (7): login correcto (token+rol), contraseña
   incorrecta, usuario inexistente, usuario inactivo, consumo de endpoint con
-  Bearer token, revocación en logout.
+  Bearer token, revocación en logout y expiración del token por ventana
+  configurada.
 - `tests/Feature/BienesCrudTest.php` (19): formato de códigos, encargado
   automático, identificador (7 dígitos, ceros, unicidad global), bloqueos de
   alumno, visibilidad por propiedad, edición con re-generación de prefijo,
@@ -218,9 +240,11 @@ sobre modelos (`refresh()`), no solo sobre el JSON de respuesta.
 
 ## 7. Pendientes
 
-- [ ] Conectar Supabase (PostgreSQL 18) — solo requiere credenciales y cambiar `DB_CONNECTION`.
+- [x] Conectar Supabase — conexión configurada por pooler en `.env` (ver §4.2).
 - [ ] Colección de Bruno (login + CRUD bienes).
 - [ ] Módulo de préstamos (solicitud, aprobación, devolución).
 - [ ] Módulo de auditorías.
 - [ ] Catálogos (CRUD admin: artículos, familias, aulas, etc.).
-- [ ] Limpieza: eliminar/renombrar `app/Models/User.php` (queda sin uso).
+
+> Nota: `app/Models/User.php` fue eliminado en el commit
+> `c07a28b` ("eliminación de user.php"); el auth usa `App\Models\Usuario`.

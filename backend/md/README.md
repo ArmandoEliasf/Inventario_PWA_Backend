@@ -2,6 +2,7 @@
 
 > Documento generado el 2026-11-11. Describe de forma técnica todo lo implementado
 > en la fase de migraciones, modelos, observers y seeders del backend Laravel 12.
+> Última sesión documentada: §15 (conexión Supabase + expiración de tokens, 2026-11-12).
 
 ## 1. Contexto
 
@@ -265,13 +266,44 @@ dependencias eliminados, rastro en bitácora), profesor (su bien), bien activo
 
 Suite completa: 44 tests / 222 aserciones.
 
+## 15. Conexión a Supabase y expiración de tokens (2026-11-12, branch `feature-conexionbasededatos`)
+
+### 15.1 Conexión (configuración de código)
+
+- `.env`: `DB_CONNECTION=pgsql`, host del pooler de Supabase
+  (`aws-1-<region>.pooler.supabase.com`), usuario `postgres.<ref-del-proyecto>`,
+  puerto 5432, BD `postgres` y `DB_SSLMODE=require`. Claves `SUPABASE_URL`,
+  `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY` y `SUPABASE_JWKS_URL`
+  documentadas en `.env.example` (el `.env` real no se versiona).
+- Drivers ligeros (la API no usa tablas de infraestructura):
+  `SESSION_DRIVER=file`, `CACHE_STORE=file`, `QUEUE_CONNECTION=sync`.
+- Verificado con Eloquent: lectura de `bienes` con relaciones cargadas
+  (`aula.edificio`, `articulo.familia.tipoBien`, `modelo.marca`, `encargado`)
+  y emisión/revocación de tokens Sanctum.
+- Nota del branch: `feature-conexionbasededatos` se había creado desde
+  `c07a28b` (antes de la última sesión); se integró `feature-verInventario`
+  con fast-forward para recuperar vistas + papelera + tests.
+
+### 15.2 Expiración de tokens
+
+- `config/sanctum.php` publicado (Laravel 12 no lo incluye por defecto):
+  `'expiration' => env('SANCTUM_TOKEN_EXPIRATION', 480)` → tokens válidos
+  **8 horas** (ventana de un turno docente), configurable desde `.env`.
+- Sanctum v4 valida que `created_at` del token esté dentro de la ventana y
+  que `expires_at` (si existiera) no haya pasado (`Guard.php:128`).
+- Los tokens se guardan hasheados (SHA-256) en `personal_access_tokens`;
+  el token plano solo se devuelve una vez al crear la sesión.
+- Test nuevo en `AuthTest`: atrasa `created_at` 481 minutos y espera 401.
+
+Suite completa: **45 tests / 223 aserciones**.
+
 ## 10. Pendientes
 
 - [x] CRUD de bienes con pautas de negocio (ver §11).
 - [x] Autenticación con Sanctum: login/logout/me + rutas protegidas (ver §12).
 - [x] Vistas del listado de bienes: general / por aula / papelera + `/api/aulas` (ver §13).
 - [x] Acciones de la papelera: restaurar y borrar definitivamente (ver §14).
-- [ ] Conexión a Supabase (PostgreSQL 18) — requiere credenciales del proyecto.
+- [x] Conexión a Supabase — configurada por pooler en `.env` (ver §15.1).
 - [ ] Colección de Bruno para pruebas de endpoints.
 - [ ] Eliminar/adaptar `User.php` por defecto según decisión de auth.
 
