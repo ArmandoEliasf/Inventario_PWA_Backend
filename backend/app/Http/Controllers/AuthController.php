@@ -53,7 +53,7 @@ class AuthController extends Controller
 
     public function me(Request $request): JsonResponse
     {
-        $usuario = $request->user()->load('role', 'persona');
+        $usuario = $request->user()->load(['role', 'persona.alumno']);
 
         return response()->json([
             'usuario' => [
@@ -64,6 +64,11 @@ class AuthController extends Controller
                 'rol' => $usuario->role?->nombre,
                 'activo' => (bool) $usuario->activo,
             ],
+            'persona' => $usuario->persona ? [
+                'cve_persona' => $usuario->persona->cve_persona,
+                'nombre' => trim($usuario->persona->nombre.' '.($usuario->persona->apellido_paterno ?? '').' '.($usuario->persona->apellido_materno ?? '')),
+                'matricula' => $usuario->persona->alumno?->matricula,
+            ] : null,
         ]);
     }
 }

@@ -26,13 +26,13 @@ class PrestamoController extends Controller
     {
         $actor = $this->actor($request);
 
-        $vista = $request->query('vista', PrestamosService::VISTA_SOLICITADOS);
+        $datos = $request->validate([
+            'vista' => ['nullable', 'in:'.implode(',', PrestamosService::VISTAS)],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+        ]);
 
-        if (! in_array($vista, PrestamosService::VISTAS, true)) {
-            abort(422, "La vista '{$vista}' no es válida.");
-        }
-
-        $perPage = max(1, min(100, (int) $request->query('per_page', 20)));
+        $vista = $datos['vista'] ?? PrestamosService::VISTA_SOLICITADOS;
+        $perPage = (int) ($datos['per_page'] ?? 20);
 
         return PrestamoResumenResource::collection($this->prestamos->listar($actor, $vista, $perPage));
     }

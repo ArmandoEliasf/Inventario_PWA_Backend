@@ -15,7 +15,7 @@ class StorePrestamoRequest extends FormRequest
     {
         return [
             'cve_bien' => ['required', 'integer', 'exists:bienes,cve_bien'],
-            'fecha_devolucion_pactada' => ['nullable', 'date'],
+            'fecha_devolucion_pactada' => ['nullable', 'date', 'after:now'],
             'observaciones' => ['nullable', 'string', 'max:500'],
         ];
     }

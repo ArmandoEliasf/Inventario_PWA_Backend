@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Models\Articulo;
-use App\Models\Bien;
 
 class CodigoBarrasService
 {
@@ -25,16 +24,5 @@ class CodigoBarrasService
         $claveArticulo = $articulo->clave;
 
         return "{$tipo}-{$familia}-{$claveArticulo}-{$identificador}";
-    }
-
-    public function existe(string $codigoBarras, ?int $excluirBien = null): bool
-    {
-        $query = Bien::query()->where('codigo_barras', $codigoBarras);
-
-        if ($excluirBien !== null) {
-            $query->where('cve_bien', '!=', $excluirBien);
-        }
-
-        return $query->exists();
     }
 }
