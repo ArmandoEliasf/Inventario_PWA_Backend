@@ -49,4 +49,23 @@ return [
         'url' => env('FRONTEND_URL', 'http://localhost:5173'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Fotos de bienes
+    |--------------------------------------------------------------------------
+    |
+    | 'disk'   = disco de Storage donde se guardan (local | google).
+    | 'carpeta' = carpeta (ruta) dentro del disco para las fotos.
+    |
+    | Con 'local' (dev/tests) los archivos caen en storage/app/private.
+    | Con 'google' se usan las credenciales GOOGLE_DRIVE_* del disco
+    | 'google' definido en config/filesystems.php.
+    |
+    */
+
+    'fotos' => [
+        'disk' => env('PHOTOS_DISK', 'local'),
+        'carpeta' => env('PHOTOS_FOLDER', 'bienes'),
+    ],
+
 ];

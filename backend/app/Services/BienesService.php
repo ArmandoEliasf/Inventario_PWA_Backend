@@ -8,6 +8,7 @@ use App\Models\BitacoraMovimiento;
 use App\Models\MotivoMovimiento;
 use App\Models\Usuario;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -31,6 +32,7 @@ class BienesService
 
     public function __construct(
         private readonly CodigoBarrasService $codigoBarras,
+        private readonly FotoService $fotos,
     ) {}
 
     /**
@@ -192,6 +194,16 @@ class BienesService
             $bien->saveQuietly();
         });
 
+        if ($datos['foto'] ?? null) {
+            try {
+                $this->fotos->subir($bien, $datos['foto']);
+            } catch (\Throwable $e) {
+                // si la subida falla, no dejamos el bien a medias
+                $bien->delete();
+                throw $e;
+            }
+        }
+
         return $bien->load(['articulo.familia.tipoBien', 'modelo.marca', 'aula', 'encargado']);
     }
 
@@ -236,6 +248,17 @@ class BienesService
         $bien->save();
 
         return $bien->fresh(['articulo.familia.tipoBien', 'modelo.marca', 'aula', 'encargado']);
+    }
+
+    /**
+     * Sube (o reemplaza) la foto de un bien existente.
+     * Quien puede ver/editar el bien (encargado o admin) puede cambiar su foto.
+     */
+    public function guardarFoto(Usuario $actor, int $cveBien, UploadedFile $foto): Bien
+    {
+        $bien = $this->obtener($actor, $cveBien);
+
+        return $this->fotos->subir($bien, $foto);
     }
 
     /**
@@ -348,6 +371,7 @@ class BienesService
             $bien->auditoriasDetalle()->delete();
             $bien->prestamos()->delete();
             $bien->movimientos()->delete();
+            $this->fotos->borrarArchivo($bien->foto_drive_id);
             $bien->delete();
         });
     }

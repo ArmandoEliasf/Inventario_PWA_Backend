@@ -29,7 +29,6 @@ class UpdateBienRequest extends FormRequest
             'estado_fisico' => ['sometimes', 'string', 'in:'.implode(',', BienesService::ESTADOS_FISICOS)],
         ];
     }
-
     public function messages(): array
     {
         return [

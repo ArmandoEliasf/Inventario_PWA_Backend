@@ -8,14 +8,17 @@ use App\Http\Resources\BienResource;
 use App\Http\Resources\BienResumenResource;
 use App\Models\Usuario;
 use App\Services\BienesService;
+use App\Services\FotoService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class BienController extends Controller
 {
     public function __construct(
         private readonly BienesService $bienes,
+        private readonly FotoService $fotos,
     ) {}
 
     /**
@@ -138,5 +141,39 @@ class BienController extends Controller
             'data' => new BienResource($bien),
             'qr_url' => $this->bienes->urlQr($bien),
         ]);
+    }
+
+    /**
+     * Sube (o reemplaza) la foto del bien. La imagen se guarda en el
+     * disco configurado (Google Drive en producción) y se actualizan
+     * foto_drive_id / foto_url.
+     */
+    public function subirFoto(Request $request, int $bien): JsonResponse
+    {
+        $actor = $this->actor($request);
+
+        $datos = $request->validate([
+            'foto' => ['required', 'image', 'mimes:'.implode(',', FotoService::EXTENSIONES), 'max:'.FotoService::MAX_KILOBYTES],
+        ]);
+
+        $bien = $this->bienes->guardarFoto($actor, $bien, $datos['foto']);
+
+        return response()->json([
+            'message' => 'Foto del bien guardada correctamente.',
+            'data' => new BienResource($bien->fresh()),
+        ]);
+    }
+
+    /**
+     * Endpoint proxy de la foto: streamea el archivo del disco de
+     * almacenamiento respetando la autorización por rol/propiedad.
+     */
+    public function foto(Request $request, int $bien): StreamedResponse
+    {
+        $actor = $this->actor($request);
+
+        $bien = $this->bienes->obtener($actor, $bien);
+
+        return $this->fotos->respuesta($bien);
     }
 }

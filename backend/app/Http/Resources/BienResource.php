@@ -17,7 +17,9 @@ class BienResource extends JsonResource
             'identificador' => $this->no_serie,
             'no_factura' => $this->no_factura,
             'descripcion' => $this->descripcion,
-            'foto_url' => $this->foto_url,
+            'tiene_foto' => $this->foto_drive_id !== null,
+            // URL del endpoint proxy que sirve la foto con autorización
+            'foto_url' => $this->foto_drive_id !== null ? '/api/bienes/'.$this->cve_bien.'/foto' : null,
             'foto_drive_id' => $this->foto_drive_id,
             'costo_unitario' => $this->costo_unitario,
             'estado_fisico' => $this->estado_fisico,

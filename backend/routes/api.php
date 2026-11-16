@@ -25,6 +25,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('bienes/{bien}/restaurar', [BienController::class, 'restaurar']);
     Route::delete('bienes/{bien}/purgar', [BienController::class, 'purgar']);
 
+    // Foto del bien: subir/reemplazar y proxy de lectura (la imagen
+    // vive en Google Drive y se sirve con la autorización del actor).
+    Route::post('bienes/{bien}/foto', [BienController::class, 'subirFoto'])
+        ->whereNumber('bien');
+    Route::get('bienes/{bien}/foto', [BienController::class, 'foto'])
+        ->whereNumber('bien');
+
     Route::get('auditorias', [AuditoriaController::class, 'index']);
     Route::post('auditorias', [AuditoriaController::class, 'store']);
     Route::get('auditorias/{auditoria}', [AuditoriaController::class, 'show'])

@@ -22,6 +22,7 @@ class BienResumenResource extends JsonResource
                 'nombre' => trim($this->encargado->nombre.' '.($this->encargado->apellido_paterno ?? '')),
             ] : null),
             'estado_fisico' => $this->estado_fisico,
+            'tiene_foto' => $this->foto_drive_id !== null,
         ];
     }
 }

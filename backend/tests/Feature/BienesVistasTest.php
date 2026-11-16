@@ -42,7 +42,7 @@ class BienesVistasTest extends TestCase
         $item = $respuesta->json('data.0');
 
         $this->assertSame(
-            ['cve_bien', 'identificador', 'nombre', 'encargado', 'estado_fisico'],
+            ['cve_bien', 'identificador', 'nombre', 'encargado', 'estado_fisico', 'tiene_foto'],
             array_keys($item),
         );
     }
@@ -422,6 +422,7 @@ class BienesVistasTest extends TestCase
     public function test_detalle_incluye_foto_y_codigo_barras(): void
     {
         $bien = Bien::query()->where('activo', true)->first();
+        $bien->foto_drive_id = 'bienes/foto-1.jpg';
         $bien->foto_url = 'https://drive.example.com/foto.jpg';
         $bien->saveQuietly();
 
@@ -430,7 +431,9 @@ class BienesVistasTest extends TestCase
             ->assertStatus(200)
             ->json('data');
 
-        $this->assertSame($bien->foto_url, $data['foto_url']);
+        // la PWA consume la foto vía el endpoint proxy, no el link de Drive
+        $this->assertSame('/api/bienes/'.$bien->cve_bien.'/foto', $data['foto_url']);
+        $this->assertTrue($data['tiene_foto']);
         $this->assertSame($bien->codigo_barras, $data['codigo_barras']);
         $this->assertSame($bien->no_serie, $data['identificador']);
     }

@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Services\BienesService;
+use App\Services\FotoService;
 use Illuminate\Foundation\Http\FormRequest;
 
 class StoreBienRequest extends FormRequest
@@ -25,6 +26,7 @@ class StoreBienRequest extends FormRequest
             'costo_unitario' => ['nullable', 'numeric', 'min:0', 'max:99999999.99'],
             'no_factura' => ['nullable', 'string', 'max:50', 'unique:bienes,no_factura'],
             'estado_fisico' => ['nullable', 'string', 'in:'.implode(',', BienesService::ESTADOS_FISICOS)],
+            'foto' => ['sometimes', 'image', 'mimes:'.implode(',', FotoService::EXTENSIONES), 'max:'.FotoService::MAX_KILOBYTES],
         ];
     }
 
@@ -33,6 +35,7 @@ class StoreBienRequest extends FormRequest
         return [
             'identificador.regex' => 'El identificador debe ser exactamente 7 dígitos numéricos (puede iniciar con ceros).',
             'estado_fisico.in' => 'Estado físico inválido. Permitidos: '.implode(', ', BienesService::ESTADOS_FISICOS),
+            'foto.max' => 'La foto no debe pesar más de '.(FotoService::MAX_KILOBYTES / 1024).' MB.',
         ];
     }
 }

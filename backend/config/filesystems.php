@@ -24,7 +24,7 @@ return [
     | may even configure multiple disks for the same driver. Examples for
     | most supported storage drivers are configured here for reference.
     |
-    | Supported drivers: "local", "ftp", "sftp", "s3"
+    | Supported drivers: "local", "ftp", "sftp", "s3", "google"
     |
     */
 
@@ -45,6 +45,19 @@ return [
             'visibility' => 'public',
             'throw' => false,
             'report' => false,
+        ],
+
+        // Disco de fotos de bienes en Google Drive (driver registrado en
+        // AppServiceProvider con masbug/flysystem-google-drive-ext).
+        'google' => [
+            'driver' => 'google',
+            'clientId' => env('GOOGLE_DRIVE_CLIENT_ID'),
+            'clientSecret' => env('GOOGLE_DRIVE_CLIENT_SECRET'),
+            'refreshToken' => env('GOOGLE_DRIVE_REFRESH_TOKEN'),
+            // Carpeta raíz dentro del Drive (nombre de carpeta o ID).
+            'folder' => env('GOOGLE_DRIVE_FOLDER', ''),
+            // 'teamDriveId' => env('GOOGLE_DRIVE_TEAM_DRIVE_ID'),
+            // 'sharedFolderId' => env('GOOGLE_DRIVE_SHARED_FOLDER_ID'),
         ],
 
         's3' => [
