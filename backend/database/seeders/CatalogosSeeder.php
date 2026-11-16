@@ -43,6 +43,14 @@ class CatalogosSeeder extends Seeder
             'requiere_aprobacion' => false,
         ]);
 
+        // Motivo del trigger trg_log_estado_fisico: el BienObserver
+        // bitacorea los cambios de estado físico detectados en una
+        // auditoría con este motivo.
+        DB::table('motivo_de_movimiento')->insert([
+            'nombre_motivo' => 'Revisión de Inventario',
+            'requiere_aprobacion' => false,
+        ]);
+
         foreach ($data['edificio'] as $row) {
             DB::table('edificio')->insert($row);
         }

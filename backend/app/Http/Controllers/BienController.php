@@ -118,4 +118,25 @@ class BienController extends Controller
             'message' => 'Bien eliminado definitivamente.',
         ]);
     }
+
+    /**
+     * Resolución de un código escaneado (QR, código de barras o
+     * identificador) al detalle completo del bien. Es la función que
+     * consume el escáner de la PWA al leer un código.
+     */
+    public function porCodigo(Request $request, string $codigo): JsonResponse
+    {
+        $actor = $this->actor($request);
+
+        if (! $this->bienes->puedeConsultar($actor)) {
+            abort(403, 'El alumno no puede consultar el inventario.');
+        }
+
+        $bien = $this->bienes->obtenerPorCodigo($actor, $codigo);
+
+        return response()->json([
+            'data' => new BienResource($bien),
+            'qr_url' => $this->bienes->urlQr($bien),
+        ]);
+    }
 }

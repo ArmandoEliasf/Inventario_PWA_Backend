@@ -353,6 +353,40 @@ class BienesService
     }
 
     /**
+     * Resolución de un código escaneado (QR, código de barras o
+     * identificador) al bien correspondiente.
+     *
+     * - Si el escaneo es la URL del QR del frontend termina en
+     *   "bienes/{id}" y se resuelve directo por clave.
+     * - Si no, se busca por codigo_barras, codigo_qr o no_serie.
+     */
+    public function obtenerPorCodigo(Usuario $actor, string $codigo): Bien
+    {
+        if (preg_match('/bienes\/(\d+)$/', $codigo, $coincidencia)) {
+            return $this->obtener($actor, (int) $coincidencia[1]);
+        }
+
+        $bien = Bien::query()
+            ->with(['articulo.familia.tipoBien', 'modelo.marca', 'aula', 'encargado'])
+            ->where(function ($query) use ($codigo) {
+                $query->where('codigo_barras', $codigo)
+                    ->orWhere('codigo_qr', $codigo)
+                    ->orWhere('no_serie', $codigo);
+            })
+            ->first();
+
+        if ($bien === null) {
+            abort(404, 'No se encontró ningún bien con ese código.');
+        }
+
+        if (! $this->esAdmin($actor) && $bien->cve_encargado !== $actor->cve_persona) {
+            abort(403, 'No tienes acceso a este bien.');
+        }
+
+        return $bien;
+    }
+
+    /**
      * ¿El identificador ya pertenece a otro bien? El identificador se
      * almacena en la columna no_serie (UNIQUE), por lo que la unicidad
      * es global, no por artículo.
