@@ -21,6 +21,10 @@ class BitacoraMovimiento extends Model
         'observaciones',
     ];
 
+    protected $casts = [
+        'fecha_movimiento' => 'datetime',
+    ];
+
     public function bien(): BelongsTo
     {
         return $this->belongsTo(Bien::class, 'cve_bien', 'cve_bien');
