@@ -16,13 +16,15 @@ endpoints, cambios realizados y estado de los tests.
 ```
 app/
 ├── Http/Controllers/   AuthController, AulaController, BienController,
-│                       PrestamoController, AuditoriaController, ReportesController
+│                       PrestamoController, AuditoriaController,
+│                       ReportesController, InformacionController
 ├── Http/Requests/      Validación de payloads (Store/Update Bien/Prestamo/Auditoria*)
 ├── Http/Resources/     Serialización (Bien*, Prestamo*, Auditoria*)
 ├── Models/             Eloquent sobre el esquema real (tablas en español)
 ├── Observers/          PrestamoObserver, BienObserver
 └── Services/           BienesService, PrestamosService, CodigoBarrasService,
-                        AuditoriasService, ReportesService, FotoService
+                        AuditoriasService, ReportesService, FotoService,
+                        InformacionService
 ```
 
 Patrón aplicado en todos los módulos: **Controller (HTTP) → Service
@@ -248,6 +250,10 @@ fallback con motivo incorrecto).
    campos `foto` en alta, endpoints `POST/GET /api/bienes/{bien}/foto`,
    proxy de lectura con autorización y 15 tests (`BienesFotosTest`).
    `.env.example` completo (estaba vacío).
+7. **Módulo de información** (§13): `InformacionService` +
+   `InformacionController`, 17 endpoints de catálogos/datos auxiliares
+   para rellenar formularios automáticamente y 25 tests
+   (`InformacionTest`).
 
 ### Correcciones
 1. **`BienObserver` movido** de `app/Services/` a `app/Observers/`: su
@@ -285,11 +291,12 @@ cd backend
 php artisan test
 ```
 
-- **136 tests / 580 aserciones, todos en verde.**
+- **136 tests / 580 aserciones, todos en verde.** (ahora 161 / 804 con el
+  módulo de información)
 - Suite: `AuthTest`, `BienesCrudTest`, `BienesVistasTest`,
   `BienesPorCodigoTest`, `BienesFotosTest`, `PrestamosTest`,
-  `PrestamosHistorialTest`, `AuditoriasTest`, `ReportesTest`
-  (+ Example tests).
+  `PrestamosHistorialTest`, `AuditoriasTest`, `ReportesTest`,
+  `InformacionTest` (+ Example tests).
 - Corren sobre **SQLite en memoria** con `RefreshDatabase` + seeders
   completos en cada test (`phpunit.xml`).
 
@@ -302,3 +309,46 @@ php artisan test
   reales de Supabase: si alguna vez se compartió, rotarlas.
 - Las reglas de propiedad (profesor/encargado) se aplican en los
   services, no en los controllers, de forma uniforme.
+
+---
+
+## 13. Módulo Información (catálogos para formularios)
+
+Datos complementarios para que la PWA rellene formularios automáticamente
+(selects en cascada, dropdowns de bienes, personal, etc.). Adaptado del
+`InformacionController` Flight al patrón Controller → Service. Respuesta
+con envelope `{data: ...}`. Service: `InformacionService`.
+
+| Endpoint | Contenido |
+|----------|-----------|
+| `GET /api/aulas/edificio/{edificio}` | Aulas (id + nombre) de un edificio |
+| `GET /api/informacion/aulas` | Aulas con edificio, tipo, capacidad y adscripción |
+| `GET /api/informacion/personal/carrera/{carrera}` | Personas (id + nombre completo) de una carrera (área) |
+| `GET /api/informacion/profesores` | Profesores activos (id + nombre completo) |
+| `GET /api/informacion/bienes?cve_aula=` | Catálogo de bienes (id + nombre) para dropdowns |
+| `GET /api/informacion/bienes/disponibles?cve_aula=` | Bienes activos y disponibles (para solicitar préstamo) |
+| `GET /api/informacion/tipos-bien` | Catálogo de tipos de bien |
+| `GET /api/informacion/familias/tipo/{tipo}` | Familias de un tipo de bien |
+| `GET /api/informacion/articulos/familia/{familia}` | Artículos de una familia |
+| `GET /api/informacion/edificios` | Edificios activos |
+| `GET /api/informacion/tipos-aula` | Catálogo de tipos de aula |
+| `GET /api/informacion/marcas` | Catálogo de marcas |
+| `GET /api/informacion/modelos` | Catálogo de modelos (con marca y descripción) |
+| `GET /api/informacion/bien/qr/{bien}` | `codigo_qr` + `qr_url` del bien (404 si no existe) |
+| `GET /api/informacion/valor-bienes-cargo/{aula}` | Bienes del aula agrupados por nombre + `total_bienes` + `monto_total` |
+| `GET /api/informacion/valor-bienes-cargo-detalle/{aula}` | Bienes individuales con `no_serie`, costo, `tiene_foto`/`foto_url` |
+| `GET /api/informacion/bienes-por-aula/{aula}` | Bienes del aula con marca, modelo, encargado, estados y foto |
+
+Reglas de acceso:
+
+- Catálogos puros, aulas, profesores, personal y QR de un bien:
+  cualquier usuario autenticado.
+- `bienes` (catálogo), `valor-bienes-cargo*` y `bienes-por-aula`:
+  Estudiante 403; profesor limitado a los bienes donde es `cve_encargado`
+  (modelo de propiedad de este backend; el original usaba
+  `aula.cve_profesor`); admin todo.
+- `bienes/disponibles` abierto a todos los autenticados porque el
+  Estudiante también solicita préstamos.
+- `GET /api/informacion/aulas` filtra por la adscripción activa del actor
+  (igual que el controller original); usuario sin adscripción ve todas.
+- Los nombres completos se componen en PHP (compatible Postgres/SQLite).

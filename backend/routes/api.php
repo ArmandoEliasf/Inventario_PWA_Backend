@@ -4,6 +4,7 @@ use App\Http\Controllers\AuditoriaController;
 use App\Http\Controllers\AulaController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BienController;
+use App\Http\Controllers\InformacionController;
 use App\Http\Controllers\PrestamoController;
 use App\Http\Controllers\ReportesController;
 use Illuminate\Support\Facades\Route;
@@ -15,6 +16,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('me', [AuthController::class, 'me']);
 
     Route::get('aulas', [AulaController::class, 'index']);
+    Route::get('aulas/edificio/{edificio}', [InformacionController::class, 'aulasPorEdificio'])
+        ->whereNumber('edificio');
 
     Route::apiResource('bienes', BienController::class)
         ->only(['index', 'show', 'store', 'update', 'destroy'])
@@ -71,4 +74,31 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('reportes/prestamos-no-devueltos', [ReportesController::class, 'prestamosNoDevueltos']);
     Route::get('reportes/conteo-estado-fisico', [ReportesController::class, 'conteoEstadoFisico']);
     Route::get('reportes/conteo-estado-prestamo', [ReportesController::class, 'conteoEstadoPrestamo']);
+
+    // ----- Información (catálogos y datos para rellenar formularios) -----
+    Route::prefix('informacion')->group(function () {
+        Route::get('aulas', [InformacionController::class, 'aulas']);
+        Route::get('personal/carrera/{carrera}', [InformacionController::class, 'personalPorCarrera'])
+            ->whereNumber('carrera');
+        Route::get('profesores', [InformacionController::class, 'profesores']);
+        Route::get('bienes', [InformacionController::class, 'bienesCatalogo']);
+        Route::get('bienes/disponibles', [InformacionController::class, 'bienesDisponibles']);
+        Route::get('tipos-bien', [InformacionController::class, 'tiposBien']);
+        Route::get('familias/tipo/{tipo}', [InformacionController::class, 'familiasPorTipo'])
+            ->whereNumber('tipo');
+        Route::get('articulos/familia/{familia}', [InformacionController::class, 'articulosPorFamilia'])
+            ->whereNumber('familia');
+        Route::get('edificios', [InformacionController::class, 'edificios']);
+        Route::get('tipos-aula', [InformacionController::class, 'tiposAula']);
+        Route::get('marcas', [InformacionController::class, 'marcas']);
+        Route::get('modelos', [InformacionController::class, 'modelos']);
+        Route::get('bien/qr/{bien}', [InformacionController::class, 'qrBien'])
+            ->whereNumber('bien');
+        Route::get('valor-bienes-cargo/{aula}', [InformacionController::class, 'valorBienesCargo'])
+            ->whereNumber('aula');
+        Route::get('valor-bienes-cargo-detalle/{aula}', [InformacionController::class, 'valorBienesCargoDetalle'])
+            ->whereNumber('aula');
+        Route::get('bienes-por-aula/{aula}', [InformacionController::class, 'bienesPorAula'])
+            ->whereNumber('aula');
+    });
 });
