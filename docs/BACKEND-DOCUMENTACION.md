@@ -254,6 +254,9 @@ fallback con motivo incorrecto).
    `InformacionController`, 17 endpoints de catálogos/datos auxiliares
    para rellenar formularios automáticamente y 25 tests
    (`InformacionTest`).
+8. **CORS para la PWA** (§14): `config/cors.php` con origen desde
+   `FRONTEND_URL`/`FRONTEND_URLS`, sin credenciales (token Bearer) y
+   preflight cacheado; 3 tests (`CorsTest`).
 
 ### Correcciones
 1. **`BienObserver` movido** de `app/Services/` a `app/Observers/`: su
@@ -291,8 +294,8 @@ cd backend
 php artisan test
 ```
 
-- **136 tests / 580 aserciones, todos en verde.** (ahora 161 / 804 con el
-  módulo de información)
+- **161 tests / 804 aserciones, todos en verde.** (ahora 164 / ~816 con
+  CorsTest)
 - Suite: `AuthTest`, `BienesCrudTest`, `BienesVistasTest`,
   `BienesPorCodigoTest`, `BienesFotosTest`, `PrestamosTest`,
   `PrestamosHistorialTest`, `AuditoriasTest`, `ReportesTest`,
@@ -352,3 +355,23 @@ Reglas de acceso:
 - `GET /api/informacion/aulas` filtra por la adscripción activa del actor
   (igual que el controller original); usuario sin adscripción ve todas.
 - Los nombres completos se componen en PHP (compatible Postgres/SQLite).
+
+---
+
+## 14. CORS (diseñado para la PWA)
+
+Configuración en `config/cors.php` (Laravel 12 incluye `HandleCors` en el
+middleware global, no hay que registrar nada). 3 tests en `CorsTest`.
+
+| Decisión | Valor | Motivo |
+|----------|-------|--------|
+| `paths` | `api/*`, `up` | Solo la API JSON y el health check |
+| `allowed_origins` | `FRONTEND_URL` + `FRONTEND_URLS` (coma) + `localhost:5173`/`127.0.0.1:5173` solo en local/testing | Única PWA; varios builds sin tocar código; comodidad en dev |
+| `allowed_methods` | `*` | La API usa GET/POST/PUT/DELETE |
+| `allowed_headers` | `*` | `Authorization` (token) y `Content-Type` (JSON/multipart de foto) |
+| `supports_credentials` | `false` | La PWA usa token Bearer, nunca cookies |
+| `max_age` | `3600` | Cachea el preflight: una petición OPTIONS menos por llamada |
+
+Regla de seguridad: **nunca `*` en producción** — con tokens Bearer un
+origen abierto deja consumir la API desde cualquier sitio. Para
+subdominios usar `allowed_origins_patterns`.
