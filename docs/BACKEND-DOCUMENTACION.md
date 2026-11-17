@@ -8,6 +8,10 @@ endpoints, cambios realizados y estado de los tests.
   `docs/frontend-escaner-auditorias.md` y `docs/frontend-reportes.md`.
 - Stack: Laravel (Sanctum para auth) + PostgreSQL (Supabase). Los tests
   corren sobre SQLite en memoria.
+- **Documentación técnica completa por capas**: `backend/doc/`
+  (índice: `backend/doc/00-indice.md`) — arquitectura, BD, auth/roles,
+  cada módulo documentado función por función, observadores, referencia
+  API, CORS/PWA, seeders, testing y operación.
 
 ---
 
